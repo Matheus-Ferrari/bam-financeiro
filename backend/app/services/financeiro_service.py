@@ -62,6 +62,20 @@ def _mes_label(mes_num: int, ano: int) -> str:
     return f"{_MES_ABREV.get(mes_num, '?')}/{str(ano)[-2:]}"
 
 
+def _clean_str(val) -> str:
+    """Converte valor pandas para string limpa, ignorando NaN."""
+    if val is None:
+        return ""
+    try:
+        import math
+        if math.isnan(float(val)):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    s = str(val).strip()
+    return "" if s.lower() == "nan" else s
+
+
 def _status_receita(raw) -> str:
     """Tudo que não é PAGO = Pendente (inclui NaN e strings vazias)."""
     if pd.isna(raw):
@@ -335,8 +349,8 @@ class FinanceiroService:
                 "mes":         _mes_label(mn, ano_ref) if mn else str(row.get("Mês", "")),
                 "mes_num":     mn,
                 "ano":         ano_ref,
-                "status":      str(row.get("Status", "") or ""),
-                "pagamento":   str(row.get("Pagamento", "") or ""),
+                "status":      _clean_str(row.get("Status", "")),
+                "pagamento":   _clean_str(row.get("Pagamento", "")),
             })
 
         por_cat: Dict[str, float] = {}

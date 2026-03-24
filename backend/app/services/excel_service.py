@@ -102,22 +102,22 @@ class ExcelService:
     # ------------------------------------------------------------------
 
     def get_base_receitas(self) -> Optional[pd.DataFrame]:
-        """Lê a aba 'Base Receitas' sem normalizar colunas."""
-        if not self._workbook or "Base Receitas" not in self._workbook.sheet_names:
+        """Lê a aba 'Base Receitas' diretamente do disco (sempre atualizado)."""
+        if not EXCEL_FILE.exists():
             return None
         try:
-            df = pd.read_excel(self._workbook, sheet_name="Base Receitas", engine="openpyxl")
+            df = pd.read_excel(EXCEL_FILE, sheet_name="Base Receitas", engine="openpyxl")
             return df.dropna(how="all")
         except Exception as exc:
             logger.error("Erro ao ler 'Base Receitas': %s", exc)
             return None
 
     def get_base_despesas(self) -> Optional[pd.DataFrame]:
-        """Lê a aba 'Base Despesas' sem normalizar colunas."""
-        if not self._workbook or "Base Despesas" not in self._workbook.sheet_names:
+        """Lê a aba 'Base Despesas' diretamente do disco (sempre atualizado)."""
+        if not EXCEL_FILE.exists():
             return None
         try:
-            df = pd.read_excel(self._workbook, sheet_name="Base Despesas", engine="openpyxl")
+            df = pd.read_excel(EXCEL_FILE, sheet_name="Base Despesas", engine="openpyxl")
             return df.dropna(how="all")
         except Exception as exc:
             logger.error("Erro ao ler 'Base Despesas': %s", exc)

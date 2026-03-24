@@ -9,29 +9,38 @@ import {
   ChevronRight,
   Users,
   HeartPulse,
+  FolderPlus,
+  Award,
+  CreditCard,
 } from 'lucide-react'
 import { useHealth } from '../hooks/useFinanceiro'
 
 const NAV_ITEMS = [
-  { to: '/dashboard',     label: 'Dashboard',        icon: LayoutDashboard },
-  { to: '/receitas',      label: 'Receitas',         icon: TrendingUp      },
-  { to: '/despesas',      label: 'Despesas',         icon: TrendingDown    },
-  { to: '/projecoes',     label: 'Projeções',        icon: BarChart2       },
-  { to: '/cenarios',      label: 'Cenários',         icon: Sliders         },
-  { to: '/clientes',      label: 'Clientes',         icon: Users           },
-  { to: '/saude',         label: 'Saúde Financeira', icon: HeartPulse      },
-  { to: '/configuracoes', label: 'Configurações',    icon: Settings        },
+  { to: '/dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
+  { to: '/clientes',            label: 'Clientes',            icon: Users           },
+  { to: '/receitas',            label: 'Receitas',            icon: TrendingUp      },
+  { to: '/despesas',            label: 'Despesas',            icon: TrendingDown    },
+  { to: '/despesas-locais',     label: 'Despesas Fixas',      icon: CreditCard      },
+  { to: '/projetos-adicionais', label: 'Proj. Adicionais',   icon: FolderPlus      },
+  { to: '/comissoes',           label: 'Comissões',           icon: Award           },
+  { to: '/projecoes',           label: 'Projeções',           icon: BarChart2       },
+  { to: '/cenarios',            label: 'Cenários',            icon: Sliders         },
+  { to: '/saude',               label: 'Saúde Financeira',    icon: HeartPulse      },
+  { to: '/configuracoes',       label: 'Configurações',       icon: Settings        },
 ]
 
 const PAGE_TITLES = {
-  '/dashboard':     'Dashboard',
-  '/receitas':      'Receitas',
-  '/despesas':      'Despesas',
-  '/projecoes':     'Projeções',
-  '/cenarios':      'Cenários',
-  '/clientes':      'Clientes',
-  '/saude':         'Saúde Financeira',
-  '/configuracoes': 'Configurações',
+  '/dashboard':           'Dashboard',
+  '/receitas':            'Receitas',
+  '/despesas':            'Despesas',
+  '/despesas-locais':     'Despesas Fixas',
+  '/projetos-adicionais': 'Projetos Adicionais',
+  '/comissoes':           'Comissões',
+  '/projecoes':           'Projeções',
+  '/cenarios':            'Cenários',
+  '/clientes':            'Clientes',
+  '/saude':               'Saúde Financeira',
+  '/configuracoes':       'Configurações',
 }
 
 export default function MainLayout() {
