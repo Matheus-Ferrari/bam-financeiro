@@ -1,0 +1,52 @@
+[
+  {
+    "id": "c001",
+    "descricao": "Reduzir Monday.com para plano básico",
+    "categoria": "Ferramentas SaaS",
+    "economia_mensal": 500,
+    "status": "planejado",
+    "ativo": true,
+    "observacao": "Manter apenas o plano free/básico do Monday. Economia estimada de R$500/mês.",
+    "criado_em": "2026-03-01T00:00:00"
+  },
+  {
+    "id": "c002",
+    "descricao": "Cancelar CRM atual",
+    "categoria": "Ferramentas SaaS",
+    "economia_mensal": 300,
+    "status": "planejado",
+    "ativo": true,
+    "observacao": "Avaliar alternativa gratuita ou substituição por solução interna.",
+    "criado_em": "2026-03-01T00:00:00"
+  },
+  {
+    "id": "c003",
+    "descricao": "Cancelar FilterFork",
+    "categoria": "Ferramentas SaaS",
+    "economia_mensal": 200,
+    "status": "planejado",
+    "ativo": true,
+    "observacao": "Ferramenta não essencial — cancelamento imediato.",
+    "criado_em": "2026-03-01T00:00:00"
+  },
+  {
+    "id": "c004",
+    "descricao": "Cancelar assinatura auxiliar R$150",
+    "categoria": "Operacional",
+    "economia_mensal": 150,
+    "status": "planejado",
+    "ativo": true,
+    "observacao": "Custo identificado como dispensável.",
+    "criado_em": "2026-03-01T00:00:00"
+  },
+  {
+    "id": "c005",
+    "descricao": "Reduzir custo de servidor/infra",
+    "categoria": "Infraestrutura",
+    "economia_mensal": 500,
+    "status": "planejado",
+    "ativo": true,
+    "observacao": "Migrar para plano menor ou otimizar uso de cloud. Economia estimada R$500/mês.",
+    "criado_em": "2026-03-01T00:00:00"
+  }
+]

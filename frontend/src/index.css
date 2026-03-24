@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Fonte global ── */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #000000;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar customizada ── */
+::-webkit-scrollbar         { width: 5px; height: 5px; }
+::-webkit-scrollbar-track   { background: #0a0a0a; }
+::-webkit-scrollbar-thumb   { background: #2a2a2a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #12F0C6; }
+
+/* ── Recharts: remove outline do wrapper ── */
+.recharts-wrapper:focus,
+.recharts-surface:focus { outline: none; }
+
+/* ── Transição suave de páginas ── */
+.page-enter { animation: fadeIn 0.2s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utilitários customizados ── */
+@layer utilities {
+  .text-bam-green  { color: #12F0C6; }
+  .bg-bam-surface  { background-color: #1A1E21; }
+  .border-bam      { border-color: rgba(255,255,255,0.07); }
+  .ring-bam        { --tw-ring-color: #12F0C6; }
+}
