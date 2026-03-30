@@ -1,0 +1,29 @@
+[
+  {
+    "id": "proj-0001-planet-korea-lp",
+    "cliente": "Planet Korea",
+    "tipo": "lp",
+    "nome": "Landing Page Campanha Planet Korea",
+    "valor": 1000.0,
+    "competencia": "2026-03",
+    "data_vencimento": "",
+    "status_pagamento": "pendente",
+    "data_recebimento": "",
+    "observacoes": "LP completa para campanha de lançamento",
+    "criado_em": "2026-03-01T00:00:00",
+    "atualizado_em": "2026-03-24T15:50:23.922354"
+  },
+  {
+    "id": "proj-0002-murilo-apresentacao",
+    "cliente": "Murilo",
+    "tipo": "apresentacao",
+    "nome": "Apresentação Comercial Murilo",
+    "valor": 1000.0,
+    "competencia": "2026-02",
+    "data_vencimento": null,
+    "status_pagamento": "pago",
+    "data_recebimento": "2026-03-01",
+    "observacoes": "Recebido junto com mensalidade de fevereiro",
+    "criado_em": "2026-02-01T00:00:00"
+  }
+]

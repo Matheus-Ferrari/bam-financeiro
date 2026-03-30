@@ -1,0 +1,24 @@
+[
+  {
+    "id": "com-0001-edu-cemiterio",
+    "nome": "Bônus Cemitério da Cantareira",
+    "responsavel": "Edu",
+    "regra": "Comissão por gestão do cliente Cemitério da Cantareira",
+    "valor": 0.0,
+    "competencia": "2026-03",
+    "status": "pendente",
+    "observacoes": "Aguardando definição do valor com base no recebimento do cliente",
+    "criado_em": "2026-03-01T00:00:00"
+  },
+  {
+    "id": "com-0002-bonus-projetos-t1",
+    "nome": "Bônus Projetos T1",
+    "responsavel": "Equipe",
+    "regra": "Bonus trimestral por fechamento de projetos adicionais",
+    "valor": 0.0,
+    "competencia": "2026-03",
+    "status": "pendente",
+    "observacoes": "Calcular após fechamento do trim T1 2026",
+    "criado_em": "2026-03-01T00:00:00"
+  }
+]

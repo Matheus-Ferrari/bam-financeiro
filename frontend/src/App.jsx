@@ -10,6 +10,10 @@ import Cenarios            from './pages/Cenarios'
 import Clientes            from './pages/Clientes'
 import SaudeFinanceira     from './pages/SaudeFinanceira'
 import Configuracoes       from './pages/Configuracoes'
+import ProjetosAdicionais  from './pages/ProjetosAdicionais'
+import Comissoes           from './pages/Comissoes'
+import DespesasLocais      from './pages/DespesasLocais'
+import FluxoCaixa          from './pages/FluxoCaixa'
 
 export default function App() {
   return (
@@ -25,14 +29,18 @@ export default function App() {
             }
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard"     element={<Dashboard />} />
-            <Route path="receitas"      element={<Receitas />} />
-            <Route path="despesas"      element={<Despesas />} />
-            <Route path="projecoes"     element={<Projecoes />} />
-            <Route path="cenarios"      element={<Cenarios />} />
-            <Route path="clientes"      element={<Clientes />} />
-            <Route path="saude"         element={<SaudeFinanceira />} />
-            <Route path="configuracoes" element={<Configuracoes />} />
+            <Route path="dashboard"            element={<Dashboard />} />
+            <Route path="receitas"             element={<Receitas />} />
+            <Route path="despesas"             element={<Despesas />} />
+            <Route path="projecoes"            element={<Projecoes />} />
+            <Route path="cenarios"             element={<Cenarios />} />
+            <Route path="clientes"             element={<Clientes />} />
+            <Route path="saude"                element={<SaudeFinanceira />} />
+            <Route path="configuracoes"        element={<Configuracoes />} />
+            <Route path="projetos-adicionais"  element={<ProjetosAdicionais />} />
+            <Route path="comissoes"            element={<Comissoes />} />
+            <Route path="despesas-locais"      element={<DespesasLocais />} />
+            <Route path="fluxo-caixa"           element={<FluxoCaixa />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

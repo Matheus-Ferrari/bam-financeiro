@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { financeiroAPI, healthAPI, clientesAPI, cortesAPI, quickUpdateAPI } from '../services/api'
+import { financeiroAPI, healthAPI, clientesAPI, cortesAPI, quickUpdateAPI, projetosAdicionaisAPI, comissoesAPI, despesasLocaisAPI } from '../services/api'
 
 /**
  * Hook genérico para buscar dados de um endpoint.
@@ -48,5 +48,32 @@ export function useProjecoes(params) {
   return useApiData(
     () => financeiroAPI.getProjecoes(params),
     [params.crescimento_pct, params.novos_clientes_crm, params.meses]
+  )
+}
+
+export const useProjetosAdicionais = () => useApiData(() => projetosAdicionaisAPI.getAll())
+export const useComissoes           = () => useApiData(() => comissoesAPI.getAll())
+export const useDespesasLocais      = () => useApiData(() => despesasLocaisAPI.getAll())
+
+// ── Fluxo de Caixa ───────────────────────────────────────────────────────
+
+export function useFluxoCaixa(params = {}) {
+  return useApiData(
+    () => financeiroAPI.getFluxoCaixa(params),
+    [params.mes, params.ano, params.tipo, params.status, params.cliente, params.categoria]
+  )
+}
+
+export function useConciliacao(params = {}) {
+  return useApiData(
+    () => financeiroAPI.getConciliacao(params),
+    [params.mes, params.ano]
+  )
+}
+
+export function useRecebimentosClientes(params = {}) {
+  return useApiData(
+    () => financeiroAPI.getRecebimentosClientes(params),
+    [params.mes, params.ano]
   )
 }

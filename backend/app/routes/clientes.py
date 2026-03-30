@@ -14,18 +14,24 @@ router = APIRouter()
 
 class ClienteCreate(BaseModel):
     nome: str
-    status: str = "ativo"           # ativo | pausado | encerrado | potencial
-    tipo: str = "recorrente"        # recorrente | projeto | consultoria | crm | marketing | outro
+    status: str = "ativo"
+    tipo: str = "recorrente"
     valor_mensal: float = 0.0
     valor_previsto: Optional[float] = None
     valor_recebido: float = 0.0
-    status_pagamento: str = "pendente"  # pago | pendente
+    status_pagamento: str = "pendente"
     data_pagamento: Optional[str] = None
     mes_referencia_pagamento: Optional[str] = None
     observacao_pagamento: Optional[str] = None
     data_inicio: Optional[str] = None
     responsavel: Optional[str] = None
     observacoes: Optional[str] = None
+    dia_pagamento: Optional[int] = None
+    cobranca_status: str = "sem_cobrar"
+    cobranca_obs: Optional[str] = None
+    ultimo_contato: Optional[str] = None
+    proximo_followup: Optional[str] = None
+    forma_contato: Optional[str] = "whatsapp"
 
 
 class ClienteUpdate(BaseModel):
@@ -42,6 +48,12 @@ class ClienteUpdate(BaseModel):
     data_inicio: Optional[str] = None
     responsavel: Optional[str] = None
     observacoes: Optional[str] = None
+    dia_pagamento: Optional[int] = None
+    cobranca_status: Optional[str] = None
+    cobranca_obs: Optional[str] = None
+    ultimo_contato: Optional[str] = None
+    proximo_followup: Optional[str] = None
+    forma_contato: Optional[str] = None
 
 
 @router.get("")
