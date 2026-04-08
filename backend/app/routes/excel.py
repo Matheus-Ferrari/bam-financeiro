@@ -1,27 +1,24 @@
 """
-Rota /excel — expõe informações sobre o arquivo Excel carregado.
+Rota /excel — mantida por compatibilidade com o frontend.
+Retorna informações estáticas (dados agora estão no Firestore).
 """
 
-from fastapi import APIRouter, HTTPException
-from app.services.excel_service import ExcelService
+from fastapi import APIRouter
 
 router = APIRouter()
-_excel = ExcelService()
 
 
 @router.get("/sheets")
 def list_sheets():
-    """Lista todas as abas detectadas no arquivo Excel."""
-    try:
-        info = _excel.get_sheets_info()
-        return {
-            "status": "ok",
-            "arquivo": info["arquivo"],
-            "carregado": info["carregado"],
-            "abas": info["abas"],
-            "total_abas": len(info["abas"]),
-            "mapeamento": info["mapeamento"],
-            "usando_mock": info["usando_mock"],
-        }
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    """Informações sobre a fonte de dados atual (Firestore)."""
+    return {
+        "status":      "ok",
+        "arquivo":     None,
+        "carregado":   False,
+        "abas":        [],
+        "total_abas":  0,
+        "mapeamento":  {},
+        "usando_mock": False,
+        "fonte":       "firestore",
+        "mensagem":    "Dados migrados para Firestore. Excel não é mais utilizado.",
+    }

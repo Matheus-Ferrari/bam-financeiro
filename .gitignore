@@ -12,6 +12,11 @@ venv/
 .env
 *.env
 
+# Credenciais / Service Accounts — NUNCA commitar
+*firebase-adminsdk*.json
+*serviceAccountKey*.json
+*.service-account.json
+
 # VS Code
 .vscode/
 

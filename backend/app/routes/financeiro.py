@@ -2,19 +2,15 @@
 Rotas /financeiro — todos os endpoints financeiros principais.
 """
 
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from openpyxl import load_workbook
 from pydantic import BaseModel
 from app.services.financeiro_service import FinanceiroService
 from app.services.fluxo_caixa_service import FluxoCaixaService
 from app.services.operacao_service import OperacaoService
 from app.services.projection_service import ProjectionService
 from app.services.saude_service import SaudeService
-
-_EXCEL_PATH = Path(__file__).resolve().parents[3] / "data" / "Financeiro_BAM_Fase1_BI.xlsx"
 
 
 class DespesaUpdate(BaseModel):
@@ -28,19 +24,6 @@ class ReceitaUpdate(BaseModel):
     valor: Optional[float] = None
     descricao: Optional[str] = None
     status: Optional[str] = None
-
-
-def _update_excel_row(sheet_name: str, row_excel: int, updates: dict) -> None:
-    """Abre o Excel, atualiza a linha indicada e salva."""
-    wb = load_workbook(_EXCEL_PATH, keep_links=False)
-    ws = wb[sheet_name]
-    headers = [str(c.value).strip() if c.value else '' for c in ws[1]]
-    col_map = {h: i + 1 for i, h in enumerate(headers)}
-    for field, value in updates.items():
-        if field in col_map and value is not None:
-            ws.cell(row=row_excel, column=col_map[field]).value = value
-    wb.save(_EXCEL_PATH)
-    wb.close()
 
 router = APIRouter()
 _fin   = FinanceiroService()
@@ -92,47 +75,40 @@ def get_despesas():
 
 
 @router.put("/despesas/{id}")
-def update_despesa(id: int, body: DespesaUpdate):
-    """Atualiza uma despesa diretamente no Excel. id = índice do lançamento (1-based)."""
-    if not _EXCEL_PATH.exists():
-        raise HTTPException(status_code=503, detail="Arquivo Excel não encontrado")
-    # pandas row index id-1 → excel row = id + 1 (header na linha 1)
-    excel_row = id + 1
+def update_despesa(id: str, body: DespesaUpdate):
+    """Atualiza uma despesa no Firestore. id = document ID (string UUID)."""
+    from app.repositories import despesas_repo
     mapping = {
-        "Valor":     body.valor,
-        "Despesa":   body.descricao,
-        "Status":    body.status,
-        "Categoria": body.categoria,
+        "valor":     body.valor,
+        "descricao": body.descricao,
+        "status":    body.status,
+        "categoria": body.categoria,
     }
     updates = {k: v for k, v in mapping.items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
-    try:
-        _update_excel_row("Base Despesas", excel_row, updates)
-        return {"ok": True, "row": excel_row, "updates": updates}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    result = despesas_repo.update(id, updates)
+    if not result:
+        raise HTTPException(status_code=404, detail="Despesa não encontrada")
+    return {"ok": True, "id": id, "updates": updates}
 
 
 @router.put("/receitas/{id}")
-def update_receita(id: int, body: ReceitaUpdate):
-    """Atualiza uma receita diretamente no Excel. id = índice do lançamento (1-based)."""
-    if not _EXCEL_PATH.exists():
-        raise HTTPException(status_code=503, detail="Arquivo Excel não encontrado")
-    excel_row = id + 1
+def update_receita(id: str, body: ReceitaUpdate):
+    """Atualiza uma receita no Firestore. id = document ID (string UUID)."""
+    from app.repositories import receitas_repo
     mapping = {
-        "Valor Previsto": body.valor,
-        "Descrição":      body.descricao,
-        "Status":         body.status,
+        "valor_previsto": body.valor,
+        "descricao":      body.descricao,
+        "status":         body.status,
     }
     updates = {k: v for k, v in mapping.items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
-    try:
-        _update_excel_row("Base Receitas", excel_row, updates)
-        return {"ok": True, "row": excel_row, "updates": updates}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    result = receitas_repo.update(id, updates)
+    if not result:
+        raise HTTPException(status_code=404, detail="Receita não encontrada")
+    return {"ok": True, "id": id, "updates": updates}
 
 
 @router.get("/projecoes")

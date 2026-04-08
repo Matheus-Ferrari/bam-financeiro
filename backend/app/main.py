@@ -3,6 +3,7 @@ BAM Financeiro - API Principal
 Ponto de entrada da aplicação FastAPI.
 """
 
+import logging
 import os
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, clientes, cortes, excel, financeiro, health, quick_update, projetos_adicionais, comissoes, despesas_locais
 from app.utils.auth import require_auth
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="BAM Financeiro API",
     description="Sistema financeiro BAM — API v1.0",
@@ -25,6 +28,19 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+# ── Inicialização Firebase ────────────────────────────────────────────────
+@app.on_event("startup")
+def _startup():
+    try:
+        from app.firebase_app import get_db
+        get_db()  # força inicialização e valida credenciais
+        logger.info("Firebase inicializado com sucesso.")
+    except Exception as exc:
+        logger.error("ERRO ao inicializar Firebase: %s", exc)
+        raise
+
 
 # ── CORS ─────────────────────────────────────────────────────────────────
 _origins = [

@@ -1,7 +1,7 @@
 """
 FinanceiroService — consolida receitas, despesas, KPIs e alertas.
-Lê dados reais de Base Receitas e Base Despesas do Excel.
-Fallback automático para dados mock caso o Excel não esteja disponível.
+Lê dados de receitas e despesas do Firestore.
+Fallback automático para dados mock caso o Firestore esteja vazio.
 """
 
 import logging
@@ -10,8 +10,6 @@ from datetime import date
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-
-from app.services.excel_service import ExcelService
 
 logger = logging.getLogger(__name__)
 
@@ -98,30 +96,57 @@ def _centro_custo(categoria: str) -> str:
 
 class FinanceiroService:
     def __init__(self):
-        self.excel = ExcelService()
+        pass  # sem dependência de Excel ou arquivo local
 
     # ------------------------------------------------------------------
-    # Carregadores internos
+    # Carregadores internos (Firestore → DataFrame)
     # ------------------------------------------------------------------
 
     def _carregar_receitas_df(self) -> Optional[pd.DataFrame]:
-        df = self.excel.get_base_receitas()
-        if df is None or df.empty:
+        from app.repositories import receitas_repo
+        items = receitas_repo.all()
+        if not items:
             return None
-        df = df.copy()
-        df["Valor Previsto"] = pd.to_numeric(df.get("Valor Previsto"), errors="coerce").fillna(0)
+        records = [
+            {
+                "Mês":            item.get("mes", ""),
+                "Serviço":        item.get("servico", ""),
+                "Cliente":        item.get("cliente", ""),
+                "Descrição":      item.get("descricao", ""),
+                "Valor Previsto": item.get("valor_previsto", 0),
+                "Status":         item.get("status", ""),
+                "Pagamento":      item.get("pagamento", ""),
+                "_doc_id":        item.get("id", ""),
+            }
+            for item in items
+        ]
+        df = pd.DataFrame(records)
+        df["Valor Previsto"] = pd.to_numeric(df["Valor Previsto"], errors="coerce").fillna(0)
         df["Mês"]    = df["Mês"].astype(str).str.strip()
-        df["Status"] = df.get("Status", "").astype(str).str.upper().str.strip()
+        df["Status"] = df["Status"].astype(str).str.upper().str.strip()
         return df
 
     def _carregar_despesas_df(self) -> Optional[pd.DataFrame]:
-        df = self.excel.get_base_despesas()
-        if df is None or df.empty:
+        from app.repositories import despesas_repo
+        items = despesas_repo.all()
+        if not items:
             return None
-        df = df.copy()
-        df["Valor"]     = pd.to_numeric(df.get("Valor"), errors="coerce").fillna(0)
+        records = [
+            {
+                "Mês":       item.get("mes", ""),
+                "Categoria": item.get("categoria", ""),
+                "Despesa":   item.get("descricao", ""),
+                "Valor":     item.get("valor", 0),
+                "Status":    item.get("status", ""),
+                "Pagamento": item.get("pagamento", ""),
+                "_doc_id":   item.get("id", ""),
+            }
+            for item in items
+        ]
+        df = pd.DataFrame(records)
+        df["Valor"]     = pd.to_numeric(df["Valor"], errors="coerce").fillna(0)
         df["Mês"]       = df["Mês"].astype(str).str.strip()
-        df["Categoria"] = df.get("Categoria", "").astype(str).str.strip()
+        df["Categoria"] = df["Categoria"].astype(str).str.strip()
         return df
 
     def _mes_para_num(self, nome: str) -> int:
@@ -197,7 +222,7 @@ class FinanceiroService:
         total_d_real = sum(m["despesa"] for m in meses_real)
 
         return {
-            "fonte":            "excel",
+            "fonte":            "firestore",
             "meses":            meses,
             "anos_disponiveis": [ano_ref],
             "total_receita":    round(total_r_real, 2),
@@ -230,8 +255,8 @@ class FinanceiroService:
         d_ult     = ultimo.get("despesa", 0)
         a_receber = sum(m.get("a_receber", 0) for m in meses)
 
-        df_r = self.excel.get_base_receitas()
-        df_d = self.excel.get_base_despesas()
+        df_r = self._carregar_receitas_df()
+        df_d = self._carregar_despesas_df()
         n_lanc = (len(df_r) if df_r is not None and not df_r.empty else 0) + \
                  (len(df_d) if df_d is not None and not df_d.empty else 0)
         if n_lanc == 0:
@@ -280,7 +305,7 @@ class FinanceiroService:
         for i, row in df.iterrows():
             mn = int(row.get("_mes_num", 0))
             lancamentos.append({
-                "id":        i + 1,
+                "id":        row.get("_doc_id") or str(i + 1),
                 "descricao": str(row.get("Descrição", "") or ""),
                 "categoria": str(row.get("Serviço", "") or "Outros"),
                 "cliente":   str(row.get("Cliente", "") or ""),
@@ -341,7 +366,7 @@ class FinanceiroService:
             mn  = int(row.get("_mes_num", 0))
             cat = str(row.get("Categoria", "") or "Outros")
             lancamentos.append({
-                "id":          i + 1,
+                "id":          row.get("_doc_id") or str(i + 1),
                 "descricao":   str(row.get("Despesa", "") or ""),
                 "categoria":   cat,
                 "centro_custo": _centro_custo(cat),

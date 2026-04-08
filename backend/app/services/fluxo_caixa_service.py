@@ -1,9 +1,8 @@
 """
 FluxoCaixaService — fluxo de caixa unificado + conciliação financeira.
 
-Lê dados reais do Excel (Base Receitas + Base Despesas) e do JSON storage
-(movimentacoes), constrói lançamentos padronizados e suporta conciliação
-manual. Preparado para futura integração com banco/Open Finance.
+Lê dados de receitas e despesas do Firestore e do storage de movimentacoes,
+constrói lançamentos padronizados e suporta conciliação manual.
 """
 
 import calendar
@@ -13,9 +12,6 @@ import unicodedata
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
-
-from app.services.excel_service import ExcelService
 from app.services.storage_service import (
     caixa_storage,
     clientes_storage,
@@ -103,7 +99,7 @@ def _origem_despesa(categoria: str) -> str:
 
 class FluxoCaixaService:
     def __init__(self):
-        self.excel = ExcelService()
+        pass  # sem dependência de Excel
 
     # ── Helpers de construção de lançamentos ────────────────────────────
 
@@ -120,26 +116,26 @@ class FluxoCaixaService:
                 if r.get("lancamento_id")}
 
     def _build_receitas(self, cm: Dict, sm: Dict) -> List[Dict]:
-        """Lê Base Receitas do Excel → lançamentos de ENTRADA."""
-        df = self.excel.get_base_receitas()
-        if df is None or df.empty:
+        """Lê receitas do Firestore → lançamentos de ENTRADA."""
+        from app.repositories import receitas_repo
+        items = receitas_repo.all()
+        if not items:
             return []
         ano = date.today().year
         result = []
-        for i, row in df.iterrows():
-            mes_nome = _clean(row.get("Mês", ""))
+        for item in items:
+            mes_nome = _clean(item.get("mes", ""))
             data_comp = _mes_to_iso(mes_nome, ano)
             if not data_comp:
                 continue
-            status_raw = _clean(row.get("Status", "")).upper()
+            status_raw = _clean(item.get("status", "")).upper()
             status = "recebido" if status_raw == "PAGO" else "previsto"
-            valor_prev = _to_float(row.get("Valor Previsto", 0))
+            valor_prev = _to_float(item.get("valor_previsto", 0))
 
-            lid = f"rec_{i + 1}"
-            conc = cm.get(lid, {})
+            lid    = item["id"]
+            conc   = cm.get(lid, {})
             override = sm.get(lid, {})
 
-            # Aplica override de status manual
             if override.get("status"):
                 status = override["status"]
             if override.get("valor_realizado") is not None:
@@ -152,47 +148,47 @@ class FluxoCaixaService:
                 "data_competencia":   data_comp,
                 "data_vencimento":    data_comp,
                 "data_pagamento":     data_comp if status == "recebido" else None,
-                "descricao":          _clean(row.get("Descrição", "")) or _clean(row.get("Serviço", "")) or "Receita",
-                "cliente":            _clean(row.get("Cliente", "")),
-                "categoria":          _clean(row.get("Serviço", "")) or "Receita",
+                "descricao":          item.get("descricao", "") or item.get("servico", "") or "Receita",
+                "cliente":            item.get("cliente", ""),
+                "categoria":          item.get("servico", "") or "Receita",
                 "subcategoria":       "",
                 "tipo":               "entrada",
                 "valor_previsto":     round(valor_prev, 2),
                 "valor_realizado":    round(valor_real, 2),
                 "status":             status,
                 "recorrente":         True,
-                "origem":             "cliente_mensal",
-                "forma_pagamento":    _clean(row.get("Pagamento", "")),
+                "origem":             "receita_fixa",
+                "forma_pagamento":    item.get("pagamento", ""),
                 "conta_financeira":   "conta_principal",
                 "conciliado":         conc.get("status_conciliacao") == "conciliado",
                 "status_conciliacao": conc.get("status_conciliacao", "pendente"),
                 "observacao":         conc.get("observacao", ""),
-                "fonte":              "excel",
+                "fonte":              "firestore",
             })
         return result
 
     def _build_despesas(self, cm: Dict, sm: Dict) -> List[Dict]:
-        """Lê Base Despesas do Excel → lançamentos de SAÍDA."""
-        df = self.excel.get_base_despesas()
-        if df is None or df.empty:
+        """Lê despesas do Firestore → lançamentos de SAÍDA."""
+        from app.repositories import despesas_repo
+        items = despesas_repo.all()
+        if not items:
             return []
         ano = date.today().year
         result = []
-        for i, row in df.iterrows():
-            mes_nome = _clean(row.get("Mês", ""))
+        for item in items:
+            mes_nome = _clean(item.get("mes", ""))
             data_comp = _mes_to_iso(mes_nome, ano)
             if not data_comp:
                 continue
-            status_raw = _clean(row.get("Status", "")).upper()
+            status_raw = _clean(item.get("status", "")).upper()
             status = "pago" if status_raw == "PAGO" else "previsto"
-            valor = _to_float(row.get("Valor", 0))
-            categoria = _clean(row.get("Categoria", "")) or "Despesa"
+            valor = _to_float(item.get("valor", 0))
+            categoria = item.get("categoria", "") or "Despesa"
 
-            lid = f"dep_{i + 1}"
-            conc = cm.get(lid, {})
+            lid    = item["id"]
+            conc   = cm.get(lid, {})
             override = sm.get(lid, {})
 
-            # Aplica override de status manual
             if override.get("status"):
                 status = override["status"]
             if override.get("valor_realizado") is not None:
@@ -205,7 +201,7 @@ class FluxoCaixaService:
                 "data_competencia":   data_comp,
                 "data_vencimento":    data_comp,
                 "data_pagamento":     data_comp if status == "pago" else None,
-                "descricao":          _clean(row.get("Despesa", "")) or categoria,
+                "descricao":          item.get("descricao", "") or categoria,
                 "cliente":            "",
                 "categoria":          categoria,
                 "subcategoria":       "",
@@ -220,7 +216,7 @@ class FluxoCaixaService:
                 "conciliado":         conc.get("status_conciliacao") == "conciliado",
                 "status_conciliacao": conc.get("status_conciliacao", "pendente"),
                 "observacao":         conc.get("observacao", ""),
-                "fonte":              "excel",
+                "fonte":              "firestore",
             })
         return result
 
@@ -384,7 +380,7 @@ class FluxoCaixaService:
             + self._build_manuais(cm)
         )
 
-        # Deduplicação: remove entradas de Excel que já existem nos clientes JSON
+        # Deduplicação: remove receitas_fixa que já existem nos clientes JSON
         # (mesmo nome de cliente + mesmo mês-ano)
         cli_months = {
             (_norm(l["cliente"]), l["data_competencia"][:7])
@@ -394,7 +390,7 @@ class FluxoCaixaService:
         todos = [
             l for l in todos
             if not (
-                l["id"].startswith("rec_")
+                l.get("origem") == "receita_fixa"
                 and l.get("cliente")
                 and (_norm(l["cliente"]), l.get("data_competencia", "")[:7]) in cli_months
             )
@@ -473,7 +469,7 @@ class FluxoCaixaService:
         todos = [
             l for l in todos
             if not (
-                l["id"].startswith("rec_") and l.get("cliente")
+                l.get("origem") == "receita_fixa" and l.get("cliente")
                 and (_norm(l["cliente"]), l.get("data_competencia", "")[:7]) in cli_months
             )
         ]
@@ -614,25 +610,24 @@ class FluxoCaixaService:
         mes_ref = mes or hoje.month
         ano_ref = ano or hoje.year
 
-        # Agrega receitas Excel por cliente no mês de referência
+        # Agrega receitas Firestore por cliente no mês de referência
         receitas_por_cliente: Dict[str, Dict[str, float]] = {}
-        df = self.excel.get_base_receitas()
-        if df is not None and not df.empty:
-            for _, row in df.iterrows():
-                nome = _clean(row.get("Cliente", ""))
-                if not nome:
-                    continue
-                mn = _mes_num(_clean(row.get("Mês", "")))
-                if mn != mes_ref:
-                    continue
-                valor = _to_float(row.get("Valor Previsto", 0))
-                status = _clean(row.get("Status", "")).upper()
+        from app.repositories import receitas_repo
+        for item in receitas_repo.all():
+            nome = _clean(item.get("cliente", ""))
+            if not nome:
+                continue
+            mn = _mes_num(_clean(item.get("mes", "")))
+            if mn != mes_ref:
+                continue
+            valor = _to_float(item.get("valor_previsto", 0))
+            status = _clean(item.get("status", "")).upper()
 
-                if nome not in receitas_por_cliente:
-                    receitas_por_cliente[nome] = {"previsto": 0.0, "recebido": 0.0}
-                receitas_por_cliente[nome]["previsto"] += valor
-                if status == "PAGO":
-                    receitas_por_cliente[nome]["recebido"] += valor
+            if nome not in receitas_por_cliente:
+                receitas_por_cliente[nome] = {"previsto": 0.0, "recebido": 0.0}
+            receitas_por_cliente[nome]["previsto"] += valor
+            if status == "PAGO":
+                receitas_por_cliente[nome]["recebido"] += valor
 
         clientes = [c for c in clientes_storage.all() if c.get("status") == "ativo"]
         resultado: List[Dict] = []
