@@ -16,7 +16,7 @@ load_dotenv(dotenv_path=_ENV_PATH)
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, clientes, cortes, excel, financeiro, health, quick_update, projetos_adicionais, comissoes, despesas_locais
+from app.routes import admin, auth, clientes, cortes, excel, financeiro, health, quick_update, projetos_adicionais, comissoes, despesas_locais
 from app.utils.auth import require_auth
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ app.add_middleware(
 # ── Rotas públicas ───────────────────────────────────────────────────────
 app.include_router(health.router, tags=["health"])
 app.include_router(auth.router)     # /auth/login, /auth/logout, /auth/me
+app.include_router(admin.router)    # /admin/bootstrap (proteção própria)
 
 # ── Rotas protegidas (exigem sessão válida) ───────────────────────────────
 _auth = [Depends(require_auth)]

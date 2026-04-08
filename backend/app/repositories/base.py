@@ -38,9 +38,9 @@ class FirestoreRepository:
     # ── CRUD público ──────────────────────────────────────────────────
 
     def all(self) -> List[Dict[str, Any]]:
-        """Retorna todos os documentos da coleção."""
+        """Retorna todos os documentos da coleção (exclui docs internos _*)."""
         docs = self._ref().stream()
-        return [{"id": doc.id, **doc.to_dict()} for doc in docs]
+        return [{"id": doc.id, **doc.to_dict()} for doc in docs if not doc.id.startswith("_")]
 
     def get(self, id: str) -> Optional[Dict[str, Any]]:
         """Retorna um documento pelo ID ou None."""

@@ -64,33 +64,50 @@ def _init_firebase() -> None:
         # ── 1. Secret Manager ───────────────────────────────────────────────
         if not project_id:
             raise RuntimeError(
-                "FIREBASE_PROJECT_ID é obrigatório quando FIREBASE_SECRET_NAME está definido."
+                "FIREBASE_PROJECT_ID é obrigatório quando FIREBASE_SECRET_NAME está definido. "
+                "Defina FIREBASE_PROJECT_ID=bam-financeiro no .env ou nas variáveis de ambiente."
             )
-        logger.info("Carregando credenciais do Secret Manager: %s (v%s)", secret_name, secret_ver)
-        sa_dict = _load_secret(project_id, secret_name, secret_ver)
-        cred    = credentials.Certificate(sa_dict)
+        logger.info(
+            "[Firebase] Modo: Secret Manager — secret='%s' versão='%s' projeto='%s'",
+            secret_name, secret_ver, project_id,
+        )
+        try:
+            sa_dict = _load_secret(project_id, secret_name, secret_ver)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Falha ao ler o secret '{secret_name}' (v{secret_ver}) do projeto '{project_id}'. "
+                f"Verifique se o secret existe, se a Service Account tem permissão "
+                f"'Secret Manager Secret Accessor' e se FIREBASE_PROJECT_ID está correto. "
+                f"Detalhe: {exc}"
+            ) from exc
+        cred = credentials.Certificate(sa_dict)
         firebase_admin.initialize_app(cred, {"projectId": project_id})
+        logger.info("[Firebase] Credenciais carregadas do Secret Manager com sucesso.")
 
     elif cred_path:
         # ── 2. Arquivo local (dev) ───────────────────────────────────────────
-        logger.info("Carregando credenciais do arquivo: %s", cred_path)
+        logger.info("[Firebase] Modo: arquivo local — '%s'", cred_path)
         cred = credentials.Certificate(cred_path)
         options = {"projectId": project_id} if project_id else {}
         firebase_admin.initialize_app(cred, options)
+        logger.info("[Firebase] Credenciais carregadas do arquivo local com sucesso.")
 
     elif project_id:
-        # ── 3. Application Default Credentials (Cloud Run, GCE, etc.) ───────
-        logger.info("Usando Application Default Credentials — projeto: %s", project_id)
+        # ── 3. Application Default Credentials (Cloud Run, GCE, etc.) ───
+        logger.info("[Firebase] Modo: Application Default Credentials — projeto: %s", project_id)
         firebase_admin.initialize_app(options={"projectId": project_id})
+        logger.info("[Firebase] ADC configurado com sucesso.")
 
     else:
         raise RuntimeError(
-            "Defina FIREBASE_SECRET_NAME (+ FIREBASE_PROJECT_ID) "
-            "ou FIREBASE_CREDENTIALS_PATH no .env."
+            "Nenhuma credencial Firebase configurada. Defina uma das opções:\n"
+            "  Opção A (producão): FIREBASE_SECRET_NAME + FIREBASE_PROJECT_ID\n"
+            "  Opção B (dev local): FIREBASE_CREDENTIALS_PATH\n"
+            "  Opção C (Cloud Run/GCE): FIREBASE_PROJECT_ID (ADC automático)"
         )
 
     _db = firestore.client()
-    logger.info("Firebase inicializado — projeto: %s", project_id or "(ADC)")
+    logger.info("[Firebase] Inicializado com sucesso — projeto: %s", project_id or "(ADC)")
 
 
 def get_db() -> Any:
