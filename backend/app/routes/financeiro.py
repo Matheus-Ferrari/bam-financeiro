@@ -302,6 +302,46 @@ def update_lancamento_status(body: LancamentoStatusRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ── Edição completa de lançamento (inline edit) ──────────────────────────
+
+class LancamentoUpdateRequest(BaseModel):
+    data_competencia: Optional[str]   = None
+    descricao:        Optional[str]   = None
+    cliente:          Optional[str]   = None
+    categoria:        Optional[str]   = None
+    tipo:             Optional[str]   = None
+    valor_previsto:   Optional[float] = None
+    valor_realizado:  Optional[float] = None
+    status:           Optional[str]   = None
+    origem:           Optional[str]   = None
+
+
+@router.put("/lancamento/{lancamento_id}")
+def update_lancamento(lancamento_id: str, body: LancamentoUpdateRequest):
+    """Edição completa de campos de um lançamento (inline edit no fluxo de caixa)."""
+    TIPO_VALIDOS   = {"entrada", "saida"}
+    STATUS_VALIDOS = {"recebido", "previsto", "pago", "cancelado", "pendente", "vencido", "inadimplente"}
+    if body.tipo   and body.tipo   not in TIPO_VALIDOS:
+        raise HTTPException(status_code=400, detail=f"tipo inválido. Use: {TIPO_VALIDOS}")
+    if body.status and body.status not in STATUS_VALIDOS:
+        raise HTTPException(status_code=400, detail=f"status inválido. Use: {STATUS_VALIDOS}")
+    try:
+        return _fluxo.update_lancamento(
+            lancamento_id    = lancamento_id,
+            data_competencia = body.data_competencia,
+            descricao        = body.descricao,
+            cliente          = body.cliente,
+            categoria        = body.categoria,
+            tipo             = body.tipo,
+            valor_previsto   = body.valor_previsto,
+            valor_realizado  = body.valor_realizado,
+            status           = body.status,
+            origem           = body.origem,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Recebimentos por Cliente ─────────────────────────────────────────────
 
 @router.get("/recebimentos-clientes")

@@ -6,6 +6,7 @@ Lê dados reais do Excel (Base Receitas + Base Despesas) e do JSON storage
 manual. Preparado para futura integração com banco/Open Finance.
 """
 
+import calendar
 import logging
 import math
 import unicodedata
@@ -264,6 +265,97 @@ class FluxoCaixaService:
             })
         return result
 
+    def _build_clientes(
+        self, cm: Dict, sm: Dict,
+        mes: Optional[int] = None, ano: Optional[int] = None
+    ) -> List[Dict]:
+        """Gera lançamentos de ENTRADA a partir de clientes ativos no storage JSON.
+        ID format: cli_{client_id}_{year}{month:02d}  — único por cliente por mês.
+        """
+        hoje    = date.today()
+        mes_ref = mes if mes is not None else hoje.month
+        ano_ref = ano if ano is not None else hoje.year
+
+        result = []
+        for c in clientes_storage.all():
+            if c.get("status") != "ativo":
+                continue
+            valor = _to_float(c.get("valor_previsto") or c.get("valor_mensal") or 0)
+            if valor <= 0:
+                continue
+
+            dia     = int(c.get("dia_pagamento") or 1)
+            max_day = calendar.monthrange(ano_ref, mes_ref)[1]
+            dia     = min(dia, max_day)
+            data_comp = f"{ano_ref}-{mes_ref:02d}-{dia:02d}"
+
+            status_pgto = str(c.get("status_pagamento", "pendente")).lower()
+            if status_pgto == "pago":
+                status = "recebido"
+            elif status_pgto in ("atrasado",):
+                status = "vencido"
+            else:
+                status = "previsto"
+
+            lid  = f"cli_{c['id']}_{ano_ref}{mes_ref:02d}"
+            conc = cm.get(lid, {})
+            ov   = sm.get(lid, {})
+
+            if ov.get("status"):
+                status = ov["status"]
+            if ov.get("valor_realizado") is not None:
+                valor_real = _to_float(ov["valor_realizado"])
+            elif status == "recebido":
+                valor_real = _to_float(c.get("valor_recebido") or valor)
+            else:
+                valor_real = 0.0
+
+            result.append({
+                "id":                 lid,
+                "data_competencia":   ov.get("data_competencia") or data_comp,
+                "data_vencimento":    data_comp,
+                "data_pagamento":     c.get("data_pagamento") if status == "recebido" else None,
+                "descricao":          ov.get("descricao") or c.get("nome", "Cliente"),
+                "cliente":            ov.get("cliente") or c.get("nome", ""),
+                "categoria":          ov.get("categoria") or "Mensalidade",
+                "subcategoria":       "",
+                "tipo":               ov.get("tipo") or "entrada",
+                "valor_previsto":     round(_to_float(ov.get("valor_previsto") or valor), 2),
+                "valor_realizado":    round(valor_real, 2),
+                "status":             status,
+                "recorrente":         True,
+                "origem":             ov.get("origem") or "cliente_mensal",
+                "forma_pagamento":    "",
+                "conta_financeira":   "conta_principal",
+                "conciliado":         conc.get("status_conciliacao") == "conciliado",
+                "status_conciliacao": conc.get("status_conciliacao", "pendente"),
+                "observacao":         conc.get("observacao", ""),
+                "fonte":              "cliente",
+            })
+        return result
+
+    def _apply_field_overrides(self, todos: List[Dict], sm: Dict) -> List[Dict]:
+        """Aplica overrides de campos não-status/valor_realizado (gerados via update_lancamento)
+        a lançamentos do Excel e manuais. Clientes já aplicam seus overrides internamente."""
+        fields = ["data_competencia", "descricao", "cliente", "categoria",
+                  "tipo", "origem", "valor_previsto"]
+        result = []
+        for l in todos:
+            if l.get("fonte") == "cliente":
+                # already fully overridden in _build_clientes
+                result.append(l)
+                continue
+            ov = sm.get(l["id"], {})
+            if not ov:
+                result.append(l)
+                continue
+            updated = dict(l)
+            for f in fields:
+                if ov.get(f) is not None:
+                    updated[f] = ov[f]
+            result.append(updated)
+        return result
+
     def _caixa_atual(self) -> float:
         registros = sorted(caixa_storage.all(),
                            key=lambda r: str(r.get("data", "")),
@@ -284,7 +376,34 @@ class FluxoCaixaService:
         """Retorna fluxo de caixa unificado com totais e lançamentos filtrados."""
         cm = self._conc_map()
         sm = self._status_map()
-        todos: List[Dict] = self._build_receitas(cm, sm) + self._build_despesas(cm, sm) + self._build_manuais(cm)
+
+        clientes_lancamentos = self._build_clientes(cm, sm, mes=mes, ano=ano)
+        todos: List[Dict] = (
+            self._build_receitas(cm, sm)
+            + self._build_despesas(cm, sm)
+            + self._build_manuais(cm)
+        )
+
+        # Deduplicação: remove entradas de Excel que já existem nos clientes JSON
+        # (mesmo nome de cliente + mesmo mês-ano)
+        cli_months = {
+            (_norm(l["cliente"]), l["data_competencia"][:7])
+            for l in clientes_lancamentos
+            if l.get("cliente")
+        }
+        todos = [
+            l for l in todos
+            if not (
+                l["id"].startswith("rec_")
+                and l.get("cliente")
+                and (_norm(l["cliente"]), l.get("data_competencia", "")[:7]) in cli_months
+            )
+        ]
+
+        todos = todos + clientes_lancamentos
+
+        # Aplica overrides de campos adicionais (data, descricao, etc.)
+        todos = self._apply_field_overrides(todos, sm)
 
         # Filtros opcionais
         ano_ref = ano or date.today().year
@@ -345,7 +464,20 @@ class FluxoCaixaService:
         """Retorna KPIs e lançamentos para a tela de conciliação."""
         cm = self._conc_map()
         sm = self._status_map()
+        clientes_lancamentos = self._build_clientes(cm, sm, mes=mes, ano=ano)
         todos = self._build_receitas(cm, sm) + self._build_despesas(cm, sm) + self._build_manuais(cm)
+        cli_months = {
+            (_norm(l["cliente"]), l["data_competencia"][:7])
+            for l in clientes_lancamentos if l.get("cliente")
+        }
+        todos = [
+            l for l in todos
+            if not (
+                l["id"].startswith("rec_") and l.get("cliente")
+                and (_norm(l["cliente"]), l.get("data_competencia", "")[:7]) in cli_months
+            )
+        ]
+        todos = self._apply_field_overrides(todos + clientes_lancamentos, sm)
 
         ano_ref = ano or date.today().year
         if mes:
@@ -420,6 +552,57 @@ class FluxoCaixaService:
             status_overrides_storage.create(payload)
 
         return {"ok": True, "lancamento_id": lancamento_id, "status": status}
+
+    def update_lancamento(
+        self,
+        lancamento_id:    str,
+        data_competencia: Optional[str]   = None,
+        descricao:        Optional[str]   = None,
+        cliente:          Optional[str]   = None,
+        categoria:        Optional[str]   = None,
+        tipo:             Optional[str]   = None,
+        valor_previsto:   Optional[float] = None,
+        valor_realizado:  Optional[float] = None,
+        status:           Optional[str]   = None,
+        origem:           Optional[str]   = None,
+    ) -> Dict[str, Any]:
+        """Persiste edição completa de um lançamento via status_overrides_storage.
+        Aplica regras de consistência previsto × realizado."""
+        # Regra: realizado > 0 → status não pode ser previsto
+        tipo_ref = tipo or "entrada"
+        if valor_realizado is not None:
+            if valor_realizado > 0 and (status is None or status == "previsto"):
+                status = "recebido" if tipo_ref == "entrada" else "pago"
+            elif valor_realizado == 0 and status in ("recebido", "pago"):
+                status = "previsto"
+
+        sm       = self._status_map()
+        existing = sm.get(lancamento_id)
+        payload: Dict[str, Any] = {
+            "lancamento_id": lancamento_id,
+            "atualizado_em": datetime.now().isoformat(),
+        }
+        for field, value in [
+            ("data_competencia", data_competencia),
+            ("descricao",        descricao),
+            ("cliente",          cliente),
+            ("categoria",        categoria),
+            ("tipo",             tipo),
+            ("valor_previsto",   valor_previsto),
+            ("valor_realizado",  valor_realizado),
+            ("status",           status),
+            ("origem",           origem),
+        ]:
+            if value is not None:
+                payload[field] = value
+
+        if existing:
+            merged = {**existing, **payload, "id": str(existing["id"])}
+            status_overrides_storage.update(str(existing["id"]), merged)
+        else:
+            status_overrides_storage.create(payload)
+
+        return {"ok": True, "lancamento_id": lancamento_id}
 
     def get_recebimentos_clientes(
         self,
