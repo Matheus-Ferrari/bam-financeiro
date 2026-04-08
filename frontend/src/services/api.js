@@ -58,6 +58,7 @@ export const financeiroAPI = {
   marcarConciliacao:       (data)    => api.post('/financeiro/conciliacao/marcar', data),
   getRecebimentosClientes: (params)  => api.get('/financeiro/recebimentos-clientes', { params }),
   updateLancamentoStatus:  (data)    => api.post('/financeiro/lancamento/status', data),
+  updateLancamento:        (id, data) => api.put(`/financeiro/lancamento/${id}`, data),
 }
 
 export const quickUpdateAPI = {

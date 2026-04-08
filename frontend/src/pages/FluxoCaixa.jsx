@@ -1,13 +1,14 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   RefreshCw, TrendingUp, TrendingDown, DollarSign, CheckCircle,
   AlertCircle, Clock, Filter, X, ChevronDown, Users,
-  ArrowUpCircle, ArrowDownCircle, Banknote, Search,
+  ArrowUpCircle, ArrowDownCircle, Banknote, Search, Edit2, Save,
 } from 'lucide-react'
 import {
   useFluxoCaixa,
   useConciliacao,
   useRecebimentosClientes,
+  useClientes,
 } from '../hooks/useFinanceiro'
 import { financeiroAPI, clientesAPI } from '../services/api'
 import Card from '../components/ui/Card'
@@ -30,7 +31,7 @@ import {
   STATUS_PAGAMENTO,
 } from '../utils/financeiroUtils'
 
-// ── helpers visuais ───────────────────────────────────────────────────────
+// â”€â”€ helpers visuais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const COR_TIPO = { entrada: '#12F0C6', saida: '#EF4444' }
 
@@ -71,9 +72,36 @@ const TAB_CLS = (active) =>
 const INPUT_CLS =
   'px-3 py-2 rounded-lg text-xs text-white bg-black/40 border border-white/10 focus:outline-none focus:border-[#12F0C6]/50 placeholder:text-gray-600'
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Tab 1 — Fluxo de Caixa
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Tab 1 â€” Fluxo de Caixa
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+
+const ORIGENS_OPCOES = [
+  { v: 'cliente_mensal',    l: 'Cliente Mensal' },
+  { v: 'projeto_adicional', l: 'Proj. Adicional' },
+  { v: 'comissao',          l: 'Comissão' },
+  { v: 'despesa_fixa',      l: 'Despesa Fixa' },
+  { v: 'despesa_variavel',  l: 'Despesa Variável' },
+  { v: 'ajuste_manual',     l: 'Ajuste Manual' },
+  { v: 'boleto',            l: 'Boleto' },
+  { v: 'cartao',            l: 'Cartão' },
+  { v: 'transferencia',     l: 'Transferência' },
+]
+
+const STATUS_OPCOES = [
+  { v: 'previsto',     l: 'Previsto' },
+  { v: 'recebido',     l: 'Recebido' },
+  { v: 'pago',         l: 'Pago' },
+  { v: 'pendente',     l: 'Pendente' },
+  { v: 'vencido',      l: 'Vencido' },
+  { v: 'inadimplente', l: 'Inadimplente' },
+  { v: 'cancelado',    l: 'Cancelado' },
+]
+
+const CELL_INPUT =
+  'w-full px-1.5 py-1 rounded text-xs text-white bg-black/60 border border-[#12F0C6]/30 focus:outline-none focus:border-[#12F0C6]/70'
+const CELL_SELECT =
+  'w-full px-1 py-1 rounded text-xs text-white bg-[#1A1E21] border border-[#12F0C6]/30 focus:outline-none focus:border-[#12F0C6]/70'
 
 function TabFluxo() {
   const mesDefault = mesAtualNum()
@@ -90,6 +118,11 @@ function TabFluxo() {
   const [busca, setBusca]           = useState('')
   const [atualizando, setAtualizando] = useState(null)
 
+  // Inline editing state
+  const [editingId, setEditingId]   = useState(null)
+  const [editRow, setEditRow]       = useState({})
+  const [saving, setSaving]         = useState(false)
+
   // Monta params para o backend
   const params = useMemo(() => {
     const p = {}
@@ -104,8 +137,13 @@ function TabFluxo() {
   }, [periodo, mesNum, ano, tipo, statusFiltro, clienteFiltro])
 
   const { data, loading, error, refetch } = useFluxoCaixa(params)
+  const { data: clientesData } = useClientes()
 
   const lancamentos = data?.lancamentos ?? []
+  const clientesNomes = useMemo(
+    () => (clientesData?.clientes ?? []).map(c => c.nome).filter(Boolean).sort(),
+    [clientesData]
+  )
 
   // Categorias e origens únicas para os selects
   const categorias = useMemo(
@@ -133,7 +171,79 @@ function TabFluxo() {
     return result
   }, [lancamentos, busca, categoriaFiltro, origemFiltro])
 
-  // Troca de status manual
+  // â”€â”€ Edição inline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const startEdit = useCallback((l) => {
+    setEditingId(l.id)
+    setEditRow({
+      data_competencia: l.data_competencia ?? '',
+      descricao:        l.descricao ?? '',
+      cliente:          l.cliente ?? '',
+      categoria:        l.categoria ?? '',
+      tipo:             l.tipo ?? 'entrada',
+      valor_previsto:   l.valor_previsto ?? 0,
+      valor_realizado:  l.valor_realizado ?? 0,
+      status:           l.status ?? 'previsto',
+      origem:           l.origem ?? 'cliente_mensal',
+    })
+  }, [])
+
+  const cancelEdit = useCallback(() => {
+    setEditingId(null)
+    setEditRow({})
+  }, [])
+
+  const handleEditChange = useCallback((field, value) => {
+    setEditRow(prev => {
+      const next = { ...prev, [field]: value }
+      // Regra de consistência: realizado > 0 â†’ status não pode ser previsto
+      if (field === 'valor_realizado') {
+        const v = parseFloat(value) || 0
+        if (v > 0 && next.status === 'previsto') {
+          next.status = next.tipo === 'entrada' ? 'recebido' : 'pago'
+        } else if (v === 0 && (next.status === 'recebido' || next.status === 'pago')) {
+          next.status = 'previsto'
+        }
+      }
+      // Regra: ao mudar status manualmente, refletir realizado
+      if (field === 'status') {
+        if ((value === 'recebido' || value === 'pago') && (parseFloat(next.valor_realizado) || 0) === 0) {
+          next.valor_realizado = parseFloat(next.valor_previsto) || 0
+        }
+        if (value === 'previsto') {
+          next.valor_realizado = 0
+        }
+      }
+      return next
+    })
+  }, [])
+
+  const saveEdit = async () => {
+    setSaving(true)
+    try {
+      await financeiroAPI.updateLancamento(editingId, {
+        data_competencia: editRow.data_competencia || undefined,
+        descricao:        editRow.descricao        || undefined,
+        cliente:          editRow.cliente          || undefined,
+        categoria:        editRow.categoria        || undefined,
+        tipo:             editRow.tipo             || undefined,
+        valor_previsto:   parseFloat(editRow.valor_previsto)  || undefined,
+        valor_realizado:  parseFloat(editRow.valor_realizado),
+        status:           editRow.status           || undefined,
+        origem:           editRow.origem           || undefined,
+      })
+      setEditingId(null)
+      setEditRow({})
+      refetch()
+    } catch (e) {
+      alert('Erro ao salvar: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // â”€â”€ Troca de status rápida (botões de ação) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
   const handleStatusChange = async (lancamento, novoStatus) => {
     setAtualizando(lancamento.id)
     try {
@@ -149,6 +259,21 @@ function TabFluxo() {
       refetch()
     } catch (e) {
       alert('Erro ao atualizar: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setAtualizando(null)
+    }
+  }
+
+  // â”€â”€ Toggle conciliação â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  const handleToggleConciliacao = async (lancamento) => {
+    const novoStatus = lancamento.status_conciliacao === 'conciliado' ? 'pendente' : 'conciliado'
+    setAtualizando(lancamento.id + '_conc')
+    try {
+      await financeiroAPI.marcarConciliacao({ lancamento_id: lancamento.id, status_conciliacao: novoStatus })
+      refetch()
+    } catch (e) {
+      alert('Erro: ' + (e?.response?.data?.detail || e.message))
     } finally {
       setAtualizando(null)
     }
@@ -176,7 +301,7 @@ function TabFluxo() {
   return (
     <div className="space-y-5">
 
-      {/* ── Cards superiores ── */}
+      {/* â”€â”€ Cards superiores â”€â”€ */}
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
         {cards.map(c => (
           <SummaryCard key={c.label} {...c} loading={loading} />
@@ -192,7 +317,7 @@ function TabFluxo() {
              }}>
           <AlertCircle size={15} style={{ color: divergencia < 0 ? '#EF4444' : '#12F0C6', flexShrink: 0 }} />
           <span className="text-xs text-gray-300">
-            Divergência previsto × realizado:&nbsp;
+            Divergência previsto Á— realizado:&nbsp;
             <strong style={{ color: divergencia < 0 ? '#EF4444' : '#12F0C6' }}>
               {divergencia >= 0 ? '+' : ''}{formatCurrency(divergencia)}
             </strong>
@@ -201,7 +326,7 @@ function TabFluxo() {
         </div>
       )}
 
-      {/* ── Filtros ── */}
+      {/* â”€â”€ Filtros â”€â”€ */}
       <Card title="Filtros">
         <div className="flex flex-wrap gap-3 items-end">
 
@@ -283,10 +408,10 @@ function TabFluxo() {
         </div>
       </Card>
 
-      {/* ── Tabela principal ── */}
+      {/* â”€â”€ Tabela principal â”€â”€ */}
       <Card
         title="Lançamentos"
-        subtitle={`${filtrados.length} registros`}
+        subtitle={`${filtrados.length} registros · clique em âœ para editar inline`}
       >
         {loading ? <LoadingSpinner label="Carregando fluxo..." /> :
          error   ? <p className="text-red-400 text-sm">{error}</p> :
@@ -295,92 +420,218 @@ function TabFluxo() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                  {['Data','Descrição','Cliente','Categoria','Tipo','Previsto','Realizado','Status','Origem','Conciliado','Ações'].map(h => (
-                    <th key={h} className="text-left py-2 px-3 text-gray-500 font-medium whitespace-nowrap">{h}</th>
+                  {['Data','Descrição','Cliente','Categoria','Tipo','Previsto','Realizado','Status','Origem','Conc.','Ações'].map(h => (
+                    <th key={h} className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(l => (
-                  <tr key={l.id}
-                      className="border-b hover:bg-white/[0.02] transition-colors"
-                      style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                    <td className="py-2 px-3 text-gray-400 whitespace-nowrap">
-                      {l.data_competencia ?? '—'}
-                    </td>
-                    <td className="py-2 px-3 text-white max-w-[160px] truncate">
-                      {l.descricao || '—'}
-                    </td>
-                    <td className="py-2 px-3 text-gray-300 max-w-[120px] truncate">
-                      {l.cliente || '—'}
-                    </td>
-                    <td className="py-2 px-3 text-gray-400 max-w-[110px] truncate">
-                      {l.categoria || '—'}
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <span className="font-semibold" style={{ color: COR_TIPO[l.tipo] ?? '#9CA3AF' }}>
-                        {tipoLabel(l.tipo)}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-right whitespace-nowrap text-gray-300">
-                      {formatCurrency(l.valor_previsto)}
-                    </td>
-                    <td className="py-2 px-3 text-right whitespace-nowrap font-semibold"
-                        style={{ color: l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
-                      {formatCurrency(l.valor_realizado)}
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <StatusBadge status={l.status} />
-                    </td>
-                    <td className="py-2 px-3 text-gray-500 whitespace-nowrap">
-                      {origemLabel(l.origem)}
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <ConcBadge status={l.status_conciliacao} />
-                    </td>
-                    <td className="py-2 px-3 whitespace-nowrap">
-                      <div className="flex gap-1">
-                        {l.tipo === 'entrada' && l.status !== 'recebido' && (
-                          <button
-                            disabled={atualizando === l.id}
-                            onClick={() => handleStatusChange(l, 'recebido')}
-                            className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
-                            style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
-                            title="Marcar como Recebido">
-                            ✓ Recebido
-                          </button>
+                {filtrados.map(l => {
+                  const isEditing = editingId === l.id
+                  const isBusy    = atualizando === l.id
+                  const rowBg     = isEditing ? 'rgba(18,240,198,0.04)' : undefined
+                  const isCli     = l.id?.startsWith('cli_')
+
+                  return (
+                    <tr key={l.id}
+                        className="border-b transition-colors"
+                        style={{
+                          borderColor: 'rgba(255,255,255,0.04)',
+                          background: rowBg,
+                        }}>
+
+                      {/* DATA */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 110 }}>
+                        {isEditing
+                          ? <input type="date" className={CELL_INPUT} style={{ minWidth: 110 }}
+                              value={editRow.data_competencia}
+                              onChange={e => handleEditChange('data_competencia', e.target.value)} />
+                          : <span className="text-gray-400">{l.data_competencia ?? 'â€”'}</span>
+                        }
+                      </td>
+
+                      {/* DESCRIÇÁƒO */}
+                      <td className="py-1.5 px-2" style={{ minWidth: 130, maxWidth: 170 }}>
+                        {isEditing
+                          ? <input type="text" className={CELL_INPUT}
+                              value={editRow.descricao}
+                              onChange={e => handleEditChange('descricao', e.target.value)} />
+                          : <span className="text-white truncate block max-w-[160px]">{l.descricao || 'â€”'}</span>
+                        }
+                      </td>
+
+                      {/* CLIENTE */}
+                      <td className="py-1.5 px-2" style={{ minWidth: 110, maxWidth: 140 }}>
+                        {isEditing
+                          ? <select className={CELL_SELECT}
+                              value={editRow.cliente}
+                              onChange={e => handleEditChange('cliente', e.target.value)}>
+                              <option value="">â€” Nenhum â€”</option>
+                              {clientesNomes.map(n => <option key={n} value={n}>{n}</option>)}
+                            </select>
+                          : <span className="text-gray-300 truncate block max-w-[130px]">{l.cliente || 'â€”'}</span>
+                        }
+                      </td>
+
+                      {/* CATEGORIA */}
+                      <td className="py-1.5 px-2" style={{ minWidth: 100 }}>
+                        {isEditing
+                          ? <input type="text" className={CELL_INPUT}
+                              value={editRow.categoria}
+                              onChange={e => handleEditChange('categoria', e.target.value)} />
+                          : <span className="text-gray-400 truncate block max-w-[110px]">{l.categoria || 'â€”'}</span>
+                        }
+                      </td>
+
+                      {/* TIPO */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 80 }}>
+                        {isEditing
+                          ? <select className={CELL_SELECT}
+                              value={editRow.tipo}
+                              onChange={e => handleEditChange('tipo', e.target.value)}>
+                              <option value="entrada">Entrada</option>
+                              <option value="saida">Saída</option>
+                            </select>
+                          : <span className="font-semibold" style={{ color: COR_TIPO[l.tipo] ?? '#9CA3AF' }}>
+                              {tipoLabel(l.tipo)}
+                            </span>
+                        }
+                      </td>
+
+                      {/* PREVISTO */}
+                      <td className="py-1.5 px-2 text-right whitespace-nowrap" style={{ minWidth: 85 }}>
+                        {isEditing
+                          ? <input type="number" step="0.01" className={CELL_INPUT + ' text-right'}
+                              value={editRow.valor_previsto}
+                              onChange={e => handleEditChange('valor_previsto', e.target.value)} />
+                          : <span className="text-gray-300">{formatCurrency(l.valor_previsto)}</span>
+                        }
+                      </td>
+
+                      {/* REALIZADO */}
+                      <td className="py-1.5 px-2 text-right whitespace-nowrap" style={{ minWidth: 85 }}>
+                        {isEditing
+                          ? <input type="number" step="0.01" className={CELL_INPUT + ' text-right'}
+                              value={editRow.valor_realizado}
+                              onChange={e => handleEditChange('valor_realizado', e.target.value)} />
+                          : <span className="font-semibold"
+                              style={{ color: l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
+                              {formatCurrency(l.valor_realizado)}
+                            </span>
+                        }
+                      </td>
+
+                      {/* STATUS */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 105 }}>
+                        {isEditing
+                          ? <select className={CELL_SELECT}
+                              value={editRow.status}
+                              onChange={e => handleEditChange('status', e.target.value)}>
+                              {STATUS_OPCOES.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                            </select>
+                          : <StatusBadge status={l.status} />
+                        }
+                      </td>
+
+                      {/* ORIGEM */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 115 }}>
+                        {isEditing
+                          ? <select className={CELL_SELECT}
+                              value={editRow.origem}
+                              onChange={e => handleEditChange('origem', e.target.value)}>
+                              {ORIGENS_OPCOES.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                            </select>
+                          : <span className="text-gray-500">{origemLabel(l.origem)}</span>
+                        }
+                      </td>
+
+                      {/* CONCILIADO â€” toggle sempre visível */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 80 }}>
+                        <button
+                          disabled={atualizando === l.id + '_conc'}
+                          onClick={() => handleToggleConciliacao(l)}
+                          title={l.status_conciliacao === 'conciliado' ? 'Marcar como pendente' : 'Marcar como conciliado'}
+                          className="px-2 py-1 rounded text-[10px] font-medium transition-colors disabled:opacity-40"
+                          style={
+                            l.status_conciliacao === 'conciliado'
+                              ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
+                              : { background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }
+                          }>
+                          {l.status_conciliacao === 'conciliado' ? 'âœ“ Conc.' : '~ Pend.'}
+                        </button>
+                      </td>
+
+                      {/* AÇÁ•ES */}
+                      <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 110 }}>
+                        {isEditing ? (
+                          <div className="flex gap-1">
+                            <button
+                              disabled={saving}
+                              onClick={saveEdit}
+                              className="px-2 py-1 rounded text-[10px] font-semibold transition-opacity disabled:opacity-40 flex items-center gap-1"
+                              style={{ background: 'rgba(18,240,198,0.18)', color: '#12F0C6' }}>
+                              <Save size={10} /> Salvar
+                            </button>
+                            <button
+                              disabled={saving}
+                              onClick={cancelEdit}
+                              className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                              style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}>
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => startEdit(l)}
+                              className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
+                              style={{ background: 'rgba(129,140,248,0.10)', color: '#818CF8' }}
+                              title="Editar lançamento">
+                              <Edit2 size={10} />
+                            </button>
+                            {l.tipo === 'entrada' && l.status !== 'recebido' && (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => handleStatusChange(l, 'recebido')}
+                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                                style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
+                                title="Marcar como Recebido">
+                                âœ“ Rec.
+                              </button>
+                            )}
+                            {l.tipo === 'saida' && l.status !== 'pago' && (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => handleStatusChange(l, 'pago')}
+                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                                style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}
+                                title="Marcar como Pago">
+                                âœ“ Pago
+                              </button>
+                            )}
+                            {(l.status === 'recebido' || l.status === 'pago') && (
+                              <button
+                                disabled={isBusy}
+                                onClick={() => handleStatusChange(l, 'previsto')}
+                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                                style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}
+                                title="Reverter para Previsto">
+                                â†º
+                              </button>
+                            )}
+                          </div>
                         )}
-                        {l.tipo === 'saida' && l.status !== 'pago' && (
-                          <button
-                            disabled={atualizando === l.id}
-                            onClick={() => handleStatusChange(l, 'pago')}
-                            className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
-                            style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}
-                            title="Marcar como Pago">
-                            ✓ Pago
-                          </button>
-                        )}
-                        {(l.status === 'recebido' || l.status === 'pago') && (
-                          <button
-                            disabled={atualizando === l.id}
-                            onClick={() => handleStatusChange(l, 'previsto')}
-                            className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
-                            style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}
-                            title="Reverter para Previsto">
-                            ↺
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </Card>
 
-      {/* ── Resumo lateral ── */}
+      {/* â”€â”€ Resumo lateral â”€â”€ */}
       {!loading && data && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
@@ -402,9 +653,9 @@ function Resumo({ label, value, color }) {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Tab 2 — Conciliação
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Tab 2 â€” Conciliação
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabConciliacao() {
   const mesDefault = mesAtualNum()
@@ -528,8 +779,8 @@ function TabConciliacao() {
                         {tipoLabel(l.tipo)}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || '—'}</td>
-                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || '—'}</td>
+                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || 'â€”'}</td>
+                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || 'â€”'}</td>
                     <td className="py-2 px-3 text-right whitespace-nowrap font-semibold text-white">
                       {formatCurrency(l.valor_previsto)}
                     </td>
@@ -543,7 +794,7 @@ function TabConciliacao() {
                           className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
                           style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
                           title="Marcar como conciliado">
-                          ✓ Ok
+                          âœ“ Ok
                         </button>
                         <button
                           disabled={marcando === l.id}
@@ -587,9 +838,9 @@ function TabConciliacao() {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Tab 3 — Recebimentos por Cliente
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// Tab 3 â€” Recebimentos por Cliente
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabRecebimentos() {
   const mesDefault = mesAtualNum()
@@ -747,7 +998,7 @@ function TabRecebimentos() {
                       </td>
                       <td className="py-2 px-3 text-right whitespace-nowrap"
                           style={{ color: c.pendencia > 0 ? '#F59E0B' : '#6B7280' }}>
-                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : '—'}
+                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : 'â€”'}
                       </td>
                       <td className="py-2 px-3 whitespace-nowrap">
                         <p className="text-gray-300">dia {c.dia_pagamento}</p>
@@ -762,21 +1013,21 @@ function TabRecebimentos() {
                             <button disabled={loading_} onClick={() => handlePagamento(c, 'pago')}
                               className="px-2 py-1 rounded text-[10px] font-medium"
                               style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}>
-                              ✓ Recebido
+                              âœ“ Recebido
                             </button>
                           )}
                           {c.status_pagamento !== 'pago' && (
                             <button disabled={loading_} onClick={() => handleCobranca(c, 'cobrado')}
                               className="px-2 py-1 rounded text-[10px] font-medium"
                               style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}>
-                              ☎ Cobrado
+                              â˜Ž Cobrado
                             </button>
                           )}
                           {c.status_pagamento === 'pago' && (
                             <button disabled={loading_} onClick={() => handlePagamento(c, 'pendente')}
                               className="px-2 py-1 rounded text-[10px] font-medium"
                               style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}>
-                              ↺ Estornar
+                              â†º Estornar
                             </button>
                           )}
                         </div>
@@ -793,9 +1044,9 @@ function TabRecebimentos() {
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // Componente principal com abas
-// ═══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const TABS = [
   { id: 'fluxo',         label: 'Fluxo de Caixa',      icon: DollarSign  },

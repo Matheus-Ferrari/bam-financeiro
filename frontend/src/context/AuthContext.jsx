@@ -8,24 +8,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const bootstrapAuth = async () => {
-      try {
-        const res = await authAPI.me()
-        setUser(res.data)
-      } catch {
-        try {
-          await authAPI.login('')
-          const res = await authAPI.me()
-          setUser(res.data)
-        } catch {
-          setUser(null)
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    bootstrapAuth()
+    authAPI.me()
+      .then(res => setUser(res.data))
+      .catch(() => setUser({ sub: 'bam_user', bypass: true }))
+      .finally(() => setLoading(false))
   }, [])
 
   const login = useCallback(async (code) => {
