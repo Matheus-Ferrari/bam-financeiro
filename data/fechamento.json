@@ -1,0 +1,362 @@
+[
+  {
+    "competencia": "2026-04",
+    "despesas_previstas": [
+      {
+        "descricao": "Aluguel ",
+        "categoria": "Aluguel fixo",
+        "valor": 1968.26,
+        "vencimento": "2026-04-05",
+        "status": "pago",
+        "observacao": "Aluguel pago em abril "
+      },
+      {
+        "descricao": "Thais Salario",
+        "categoria": "Salarios",
+        "valor": 1834.0,
+        "vencimento": "2026-04-23",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Patrick Salario",
+        "categoria": "Salario",
+        "valor": 2000.0,
+        "vencimento": "2026-04-25",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Luan Salario",
+        "categoria": "Salario",
+        "valor": 2280.9,
+        "vencimento": "2026-04-25",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Ferrari Salario",
+        "categoria": "Salario",
+        "valor": 2300.0,
+        "vencimento": "2026-04-15",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Edu Salario",
+        "categoria": "Salario",
+        "valor": 3446.0,
+        "vencimento": "2026-04-20",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Fe Salario",
+        "categoria": "Salario",
+        "valor": 1834.0,
+        "vencimento": "2026-04-19",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Well Salario",
+        "categoria": "Salario",
+        "valor": 2500.0,
+        "vencimento": "2026-04-20",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Breck Salario",
+        "categoria": "Salario",
+        "valor": 2500.0,
+        "vencimento": "2026-04-20",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Lucca",
+        "categoria": "Salario",
+        "valor": 1300.0,
+        "vencimento": "2026-04-30",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Diana Faxineira",
+        "categoria": "Faxineira",
+        "valor": 235.0,
+        "vencimento": "2026-04-05",
+        "status": "pago",
+        "observacao": ""
+      },
+      {
+        "descricao": "Material de escritorio",
+        "categoria": "Material",
+        "valor": 153.7,
+        "vencimento": "2026-04-09",
+        "status": "pago",
+        "observacao": ""
+      },
+      {
+        "descricao": "Edu VT",
+        "categoria": "Beneficios",
+        "valor": 173.0,
+        "vencimento": "2025-04-02",
+        "status": "pago",
+        "observacao": "Edu gasta 10,80 Por dia, totalizando 16 dias uteis "
+      },
+      {
+        "descricao": "Thais VT",
+        "categoria": "Beneficios",
+        "valor": 230.0,
+        "vencimento": null,
+        "status": "pago",
+        "observacao": "Thais Gasta 5,40 de trem + 6,10 de bus por dia totalizando = 23 ao dia "
+      },
+      {
+        "descricao": "VT Patrick",
+        "categoria": "Beneficios",
+        "valor": 201.04,
+        "vencimento": "2026-04-01",
+        "status": "pago",
+        "observacao": "Patrick usa 10,60 x 19 "
+      },
+      {
+        "descricao": "Papel Higienico ",
+        "categoria": "Material ",
+        "valor": 33.99,
+        "vencimento": null,
+        "status": "pago",
+        "observacao": ""
+      },
+      {
+        "descricao": "Rodrigo",
+        "categoria": "Agua ",
+        "valor": 32.0,
+        "vencimento": null,
+        "status": "pago",
+        "observacao": ""
+      },
+      {
+        "descricao": "PAGAMENTO VT LUAN E FELIPE",
+        "categoria": "Benefícios ",
+        "valor": 500.0,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": "PAGAMENTO DO ESTACIONALMENTE,  250 POR MES "
+      },
+      {
+        "descricao": "Faxina dia 20 ",
+        "categoria": "Faxina",
+        "valor": 235.0,
+        "vencimento": "2026-04-20",
+        "status": "previsto",
+        "observacao": "Segunda faxina do mes "
+      },
+      {
+        "descricao": "Declaração do imposto de renda (Das)",
+        "categoria": "Impostos ",
+        "valor": 1811.99,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Inss Du",
+        "categoria": "Imposto",
+        "valor": 302.1,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "FGTS EDU",
+        "categoria": "imposto",
+        "valor": 275.68,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "INTERNET e telefone",
+        "categoria": "Gasto com internet e telefone",
+        "valor": 249.15,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Luz",
+        "categoria": "Despesa com luz",
+        "valor": 150.0,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": "Valor variável entre 100 e 150 "
+      },
+      {
+        "descricao": "Medicina do trabalho",
+        "categoria": "Despesa Com funcionario",
+        "valor": 190.0,
+        "vencimento": null,
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Dropbox",
+        "categoria": "Despesa com licença",
+        "valor": 59.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Github",
+        "categoria": "Licensa com despesa",
+        "valor": 175.7,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Adobe Plano photoshop",
+        "categoria": "Despesa com licensa",
+        "valor": 320.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Google cloud ",
+        "categoria": "Despesa com Licensa",
+        "valor": 100.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Google Workspace",
+        "categoria": "Licença com ferramente",
+        "valor": 147.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "FlutterFlow",
+        "categoria": "Despesa de licensa",
+        "valor": 222.19,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Adobe Banco de imagens",
+        "categoria": "Despesa com licensa",
+        "valor": 139.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "RD station",
+        "categoria": "Despesa com licensa ",
+        "valor": 79.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Chatgpt",
+        "categoria": "Despesa com licensa",
+        "valor": 113.66,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Apple ",
+        "categoria": "Despesa com ferramente",
+        "valor": 53.9,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Monday",
+        "categoria": "Despesa com ferramente",
+        "valor": 1206.0,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Canva",
+        "categoria": "Licensa com ferramente",
+        "valor": 44.99,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Gemini",
+        "categoria": "Despesa com ferramente",
+        "valor": 96.99,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Verificado insta",
+        "categoria": "Despesa com ferramenta",
+        "valor": 53.9,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Capcut",
+        "categoria": "Despesa com ferramenta",
+        "valor": 19.9,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": ""
+      },
+      {
+        "descricao": "Conta azul",
+        "categoria": "Despesa com ferramentea",
+        "valor": 359.9,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": "ESTAMOS VERIFICANDO CANCELAMENTO "
+      },
+      {
+        "descricao": "Despesa com Geladeira",
+        "categoria": "Despesa com utensilio",
+        "valor": 72.5,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": "Parcela 8/12"
+      },
+      {
+        "descricao": "Despesa com Microfone",
+        "categoria": "Despesa com material ",
+        "valor": 107.88,
+        "vencimento": "2026-05-05",
+        "status": "previsto",
+        "observacao": "Parcela 6/8"
+      }
+    ],
+    "reducoes": [],
+    "novos_gastos": [],
+    "anotacoes": {
+      "decisoes": "",
+      "proximos_passos": "",
+      "pendencias": "",
+      "observacoes": ""
+    },
+    "id": "ffa5a01b-f0d5-43e8-b811-3882c8b77b46",
+    "criado_em": "2026-04-10T15:32:28.949331",
+    "atualizado_em": "2026-04-10T15:34:15.098838"
+  }
+]

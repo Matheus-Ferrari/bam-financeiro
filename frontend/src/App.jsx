@@ -14,6 +14,7 @@ import ProjetosAdicionais  from './pages/ProjetosAdicionais'
 import Comissoes           from './pages/Comissoes'
 import DespesasLocais      from './pages/DespesasLocais'
 import FluxoCaixa          from './pages/FluxoCaixa'
+import FechamentoMes       from './pages/FechamentoMes'
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="comissoes"            element={<Comissoes />} />
             <Route path="despesas-locais"      element={<DespesasLocais />} />
             <Route path="fluxo-caixa"           element={<FluxoCaixa />} />
+            <Route path="fechamento"             element={<FechamentoMes />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

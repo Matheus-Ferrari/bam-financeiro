@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "lancamento_id": "rec_42",
+    "status_conciliacao": "conciliado",
+    "observacao": "",
+    "valor_extrato": null,
+    "data_conciliacao": "2026-04-05T13:48:49.207444",
+    "id": "b5f41b9c-8283-4833-81c4-569fa1bb6eea",
+    "criado_em": "2026-04-05T13:48:49.207697"
+  },
+  {
+    "lancamento_id": "rec_43",
+    "status_conciliacao": "conciliado",
+    "observacao": "",
+    "valor_extrato": null,
+    "data_conciliacao": "2026-04-05T13:48:52.208105",
+    "id": "25a0ffca-ddd1-4439-8b4d-46b914f04fd1",
+    "criado_em": "2026-04-05T13:48:52.208349"
+  }
+]

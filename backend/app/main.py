@@ -15,7 +15,7 @@ load_dotenv(dotenv_path=_ENV_PATH)
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth, clientes, cortes, excel, financeiro, health, quick_update, projetos_adicionais, comissoes, despesas_locais
+from app.routes import auth, clientes, cortes, excel, financeiro, health, quick_update, projetos_adicionais, comissoes, despesas_locais, fechamento
 from app.utils.auth import require_auth
 
 app = FastAPI(
@@ -63,6 +63,7 @@ app.include_router(quick_update.router, dependencies=_auth)
 app.include_router(projetos_adicionais.router, prefix="/projetos-adicionais", tags=["projetos-adicionais"], dependencies=_auth)
 app.include_router(comissoes.router,           prefix="/comissoes",           tags=["comissoes"],           dependencies=_auth)
 app.include_router(despesas_locais.router,     prefix="/despesas-locais",     tags=["despesas-locais"],     dependencies=_auth)
+app.include_router(fechamento.router,          prefix="/fechamento",          tags=["fechamento"],          dependencies=_auth)
 
 
 @app.get("/", tags=["root"])
