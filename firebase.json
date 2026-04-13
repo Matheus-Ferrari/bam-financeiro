@@ -1,0 +1,63 @@
+{
+  "hosting": {
+    "public": "frontend/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/auth/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/health",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/clientes/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/fechamento/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/comissoes/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/cortes/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/despesas-locais/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/projetos-adicionais/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/financeiro/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/excel/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "/quick-update/**",
+        "function": { "functionId": "api", "region": "us-central1" }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "functions": {
+    "source": "functions"
+  }
+}

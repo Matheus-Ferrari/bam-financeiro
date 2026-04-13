@@ -7,29 +7,16 @@ export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Ao iniciar, só verifica se já existe sessão ativa — não faz login automático
   useEffect(() => {
-    const bootstrapAuth = async () => {
-      try {
-        const res = await authAPI.me()
-        setUser(res.data)
-      } catch {
-        try {
-          await authAPI.login('')
-          const res = await authAPI.me()
-          setUser(res.data)
-        } catch {
-          setUser({ name: 'Usuário', offline: true })
-        }
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    bootstrapAuth()
+    authAPI.me()
+      .then(res => setUser(res.data))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false))
   }, [])
 
-  const login = useCallback(async (code) => {
-    await authAPI.login(code)
+  const login = useCallback(async (email, password) => {
+    await authAPI.login(email, password)
     const res = await authAPI.me()
     setUser(res.data)
   }, [])

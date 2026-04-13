@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider }    from './context/AuthContext'
 import ProtectedRoute      from './components/auth/ProtectedRoute'
 import MainLayout          from './layouts/MainLayout'
+import Login               from './pages/Login'
 import Dashboard           from './pages/Dashboard'
 import Receitas            from './pages/Receitas'
 import Despesas            from './pages/Despesas'
@@ -21,6 +22,7 @@ export default function App() {
     <AuthProvider>
       <Router>
         <Routes>
+          <Route path="/login" element={<Login />} />
           <Route
             path="/"
             element={
@@ -44,7 +46,7 @@ export default function App() {
             <Route path="fluxo-caixa"           element={<FluxoCaixa />} />
             <Route path="fechamento"             element={<FechamentoMes />} />
           </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Router>
     </AuthProvider>

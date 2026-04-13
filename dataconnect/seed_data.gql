@@ -1,0 +1,120 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "This is seed data and not for public use") {
+  user_insertMany(data: [
+    {
+      id: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      displayName: "Alice Smith",
+      email: "alice.smith@example.com",
+      createdAt: "2023-01-01T10:00:00Z"
+    },
+    {
+      id: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      displayName: "Bob Johnson",
+      email: "bob.johnson@example.com",
+      createdAt: "2023-01-02T11:00:00Z"
+    },
+    {
+      id: "f9e8d7c6-b5a4-3210-fedc-ba9876543210",
+      displayName: "Charlie Brown",
+      email: "charlie.brown@example.com",
+      createdAt: "2023-01-03T12:00:00Z"
+    }
+  ])
+  category_insertMany(data: [
+    {
+      id: "c1a2b3d4-e5f6-7890-1234-567890abcdef",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      name: "Food",
+      type: "Expense",
+      createdAt: "2023-01-01T10:15:00Z"
+    },
+    {
+      id: "d5e6f7a8-b9c0-1234-5678-90abcdef1234",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      name: "Salary",
+      type: "Income",
+      createdAt: "2023-01-01T10:20:00Z"
+    },
+    {
+      id: "e9f0a1b2-c3d4-5678-90ab-cdef12345678",
+      userId: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      name: "Rent",
+      type: "Expense",
+      createdAt: "2023-01-02T11:30:00Z"
+    }
+  ])
+  account_insertMany(data: [
+    {
+      id: "a0b1c2d3-e4f5-6789-abcd-ef0123456789",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      name: "Checking Account",
+      type: "Bank",
+      initialBalance: 1500.00,
+      createdAt: "2023-01-01T10:30:00Z"
+    },
+    {
+      id: "b9a8c7d6-e5f4-3210-fedc-ba9876543210",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      name: "Savings Account",
+      type: "Savings",
+      initialBalance: 5000.00,
+      createdAt: "2023-01-01T10:35:00Z"
+    },
+    {
+      id: "c3d4e5f6-a7b8-9012-3456-7890abcdef12",
+      userId: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      name: "Credit Card",
+      type: "Credit Card",
+      initialBalance: -250.00,
+      createdAt: "2023-01-02T11:45:00Z"
+    }
+  ])
+  transaction_insertMany(data: [
+    {
+      id: "t1u2v3w4-x5y6-7z8a-9b0c-d1e2f3a4b5c6",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      accountId: "a0b1c2d3-e4f5-6789-abcd-ef0123456789",
+      categoryId: "c1a2b3d4-e5f6-7890-1234-567890abcdef",
+      description: "Groceries",
+      amount: 75.50,
+      date: "2023-01-05",
+      type: "Expense",
+      isRecurring: false,
+      createdAt: "2023-01-05T14:00:00Z"
+    },
+    {
+      id: "t7u8v9w0-x1y2-3z4a-5b6c-d7e8f9a0b1c2",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      accountId: "a0b1c2d3-e4f5-6789-abcd-ef0123456789",
+      categoryId: "d5e6f7a8-b9c0-1234-5678-90abcdef1234",
+      description: "Monthly Salary",
+      amount: 2500.00,
+      date: "2023-01-01",
+      type: "Income",
+      isRecurring: true,
+      createdAt: "2023-01-01T09:00:00Z"
+    },
+    {
+      id: "t3u4v5w6-x7y8-9z0a-1b2c-d3e4f5a6b7c8",
+      userId: "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+      accountId: "c3d4e5f6-a7b8-9012-3456-7890abcdef12",
+      categoryId: "e9f0a1b2-c3d4-5678-90ab-cdef12345678",
+      description: "Apartment Rent",
+      amount: 1200.00,
+      date: "2023-01-01",
+      type: "Expense",
+      isRecurring: true,
+      createdAt: "2023-01-01T10:00:00Z"
+    }
+  ])
+  budget_insertMany(data: [
+    {
+      id: "b7c6d5e4-f3a2-1098-7654-3210fedcba98",
+      userId: "b2c1d0e5-7b3f-4a9c-8c5e-2e0f3d1a8b7c",
+      categoryId: "c1a2b3d4-e5f6-7890-1234-567890abcdef",
+      name: "Monthly Food Budget",
+      amount: 400.00,
+      period: "Monthly",
+      createdAt: "2023-01-01T10:45:00Z"
+    }
+  ])
+}

@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5001/bam-financeiro/us-central1/api'
 
 const api = axios.create({
   baseURL:         BASE,
@@ -23,9 +23,9 @@ api.interceptors.response.use(
 )
 
 export const authAPI = {
-  login:  (code) => api.post('/auth/login', { code }),
-  logout: ()     => api.post('/auth/logout'),
-  me:     ()     => api.get('/auth/me'),
+  login:  (email, password) => api.post('/auth/login', { email, password }),
+  logout: ()                => api.post('/auth/logout'),
+  me:     ()                => api.get('/auth/me'),
 }
 
 export const healthAPI = {
@@ -103,11 +103,12 @@ export const despesasLocaisAPI = {
 }
 
 export const fechamentoAPI = {
-  getAll:  ()              => api.get('/fechamento'),
-  get:     (competencia)   => api.get(`/fechamento/${competencia}`),
-  save:    (data)          => api.post('/fechamento', data),
-  update:  (id, data)      => api.put(`/fechamento/${id}`, data),
-  remove:  (id)            => api.delete(`/fechamento/${id}`),
+  getAll:             ()              => api.get('/fechamento'),
+  get:                (competencia)   => api.get(`/fechamento/${competencia}`),
+  save:               (data)          => api.post('/fechamento', data),
+  update:             (id, data)      => api.put(`/fechamento/${id}`, data),
+  remove:             (id)            => api.delete(`/fechamento/${id}`),
+  saveClientesExtras: (id, lista)     => api.put(`/fechamento/${id}`, { clientes_extras: lista }),
 }
 
 export default api

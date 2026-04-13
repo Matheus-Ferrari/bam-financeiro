@@ -223,13 +223,14 @@ export default function FechamentoMes() {
     }
   }, [fech])
 
-  // Carregar dados locais de clientes ao trocar competência
+  // Carregar clientes extras (atrasados) do backend ao receber dados
   useEffect(() => {
     const ov = JSON.parse(localStorage.getItem(`bam-cov-${competencia}`) || '{}')
-    const mn = JSON.parse(localStorage.getItem(`bam-cmn-${competencia}`) || '[]')
     setCliOv(ov)
-    setCliMn(mn)
-  }, [competencia])
+    // Fonte primária: clientes_extras retornados separadamente pelo backend
+    const extras = data?.clientes_extras ?? []
+    setCliMn(extras)
+  }, [competencia, data])
 
   // Carregar saldo e reserva do localStorage ao trocar competência
   useEffect(() => {
@@ -544,10 +545,24 @@ export default function FechamentoMes() {
     localStorage.setItem(`bam-cov-${competencia}`, JSON.stringify(nov))
   }, [competencia])
 
-  const persistCliMn = useCallback((nmn) => {
+  const persistCliMn = useCallback(async (nmn) => {
     setCliMn(nmn)
-    localStorage.setItem(`bam-cmn-${competencia}`, JSON.stringify(nmn))
-  }, [competencia])
+    // Salvar no backend — cria fechamento se ainda não existir
+    let fechId = data?.fechamento?.id
+    try {
+      if (!fechId) {
+        const res = await fechamentoAPI.save({
+          competencia,
+          despesas_previstas: [], reducoes: [], novos_gastos: [],
+          clientes_extras: nmn,
+        })
+        fechId = res.data?.id
+      } else {
+        await fechamentoAPI.saveClientesExtras(fechId, nmn)
+      }
+      refetch()
+    } catch { /* silencioso */ }
+  }, [competencia, data, refetch])
 
   const openCliModal = (mode, cliente = null) => {
     const def = { nome: '', valor: '', status_pagamento: 'pendente', cobranca_status: 'sem_cobrar',

@@ -1,9 +1,9 @@
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import LoadingSpinner from '../ui/LoadingSpinner'
 
 /**
- * Protege qualquer rota e exibe fallback se a autenticação silenciosa falhar.
- * Enquanto verifica a sessão exibe um spinner de tela cheia.
+ * Protege qualquer rota — redireciona para login se não autenticado.
  */
 export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
@@ -14,6 +14,10 @@ export default function ProtectedRoute({ children }) {
         <LoadingSpinner label="Verificando acesso..." />
       </div>
     )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />
   }
 
   return children

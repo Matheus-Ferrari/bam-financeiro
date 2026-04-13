@@ -1,0 +1,50 @@
+# 1. Query all categories for the current user
+query GetMyCategories @auth(level: USER, insecureReason: "Retrieves categories associated with the current logged-in user.") {
+  categories(where: {userId: {eq_expr: "auth.uid"}}, orderBy: [{name: ASC}]) {
+    id
+    name
+    type
+    createdAt
+  }
+}
+
+# 2. Insert a new transaction for the current user
+mutation CreateNewTransaction($accountId: UUID!, $categoryId: UUID!, $description: String!, $amount: Float!, $date: Date!, $type: String!, $isRecurring: Boolean) @auth(level: USER) {
+  transaction_insert(data: {
+    userId_expr: "auth.uid",
+    accountId: $accountId,
+    categoryId: $categoryId,
+    description: $description,
+    amount: $amount,
+    date: $date,
+    type: $type,
+    isRecurring: $isRecurring,
+    createdAt_expr: "request.time"
+  }) {
+    id
+  }
+}
+
+# 3. Update an existing budget for the current user
+mutation UpdateMyBudget($id: UUID!, $name: String, $amount: Float, $period: String) @auth(level: USER) {
+  budget_update(
+    key: {id: $id},
+    where: {userId: {eq_expr: "auth.uid"}},
+    data: {
+      name: $name,
+      amount: $amount,
+      period: $period
+    }
+  ) {
+    id
+  }
+}
+
+# 4. Get a specific account by ID, accessible publicly but only showing non-sensitive data
+query GetPublicAccountDetails($id: UUID!) @auth(level: PUBLIC, insecureReason: "Allows public access to non-sensitive account details by ID.") {
+  account(id: $id) {
+    id
+    name
+    type
+  }
+}
