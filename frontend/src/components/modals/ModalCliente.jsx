@@ -32,6 +32,14 @@ const FORMA_CONTATO_OPTS = [
   { value: 'outro',    label: 'Outro' },
 ]
 
+const FORMA_COBRANCA_OPTS = [
+  { value: 'boleto',        label: 'Boleto' },
+  { value: 'pix',           label: 'PIX' },
+  { value: 'transferencia', label: 'Transferência' },
+  { value: 'cartao',        label: 'Cartão' },
+  { value: 'outro',         label: 'Outro' },
+]
+
 const EMPTY = {
   nome:                   '',
   status:                 'ativo',
@@ -51,10 +59,26 @@ const EMPTY = {
   ultimo_contato:         '',
   proximo_followup:       '',
   forma_contato:          'whatsapp',
-  // Automação de cobrança
-  email_financeiro:        '',
-  whatsapp_financeiro:     '',
-  cobrar_automaticamente:  false,
+  // Contato
+  empresa:                '',
+  cnpj_cpf:               '',
+  email_principal:        '',
+  email_financeiro:       '',
+  telefone:               '',
+  whatsapp:               '',
+  nome_contato_financeiro:'',
+  nome_contato_principal: '',
+  tipo_contato_principal: 'whatsapp',
+  // Fiscal
+  razao_social:           '',
+  cnpj_faturamento:       '',
+  codigo_servico_nf:      '',
+  descricao_padrao_nf:    '',
+  observacoes_fiscais:    '',
+  forma_cobranca:         '',
+  // Automação (placeholders)
+  whatsapp_financeiro:    '',
+  cobrar_automaticamente: false,
 }
 
 export default function ModalCliente({ open, onClose, onSave, cliente }) {
@@ -77,9 +101,23 @@ export default function ModalCliente({ open, onClose, onSave, cliente }) {
           cobranca_status:        cliente.cobranca_status        ?? 'sem_cobrar',
           cobranca_obs:           cliente.cobranca_obs           ?? '',
           forma_contato:          cliente.forma_contato          ?? 'whatsapp',
-          email_financeiro:        cliente.email_financeiro       ?? '',
-          whatsapp_financeiro:     cliente.whatsapp_financeiro    ?? '',
-          cobrar_automaticamente:  cliente.cobrar_automaticamente ?? false,
+          empresa:                cliente.empresa                ?? '',
+          cnpj_cpf:               cliente.cnpj_cpf               ?? '',
+          email_principal:        cliente.email_principal         ?? '',
+          email_financeiro:       cliente.email_financeiro        ?? '',
+          telefone:               cliente.telefone               ?? '',
+          whatsapp:               cliente.whatsapp               ?? '',
+          nome_contato_financeiro:cliente.nome_contato_financeiro ?? '',
+          nome_contato_principal: cliente.nome_contato_principal  ?? '',
+          tipo_contato_principal: cliente.tipo_contato_principal  ?? 'whatsapp',
+          razao_social:           cliente.razao_social            ?? '',
+          cnpj_faturamento:       cliente.cnpj_faturamento        ?? '',
+          codigo_servico_nf:      cliente.codigo_servico_nf       ?? '',
+          descricao_padrao_nf:    cliente.descricao_padrao_nf     ?? '',
+          observacoes_fiscais:    cliente.observacoes_fiscais      ?? '',
+          forma_cobranca:         cliente.forma_cobranca           ?? '',
+          whatsapp_financeiro:    cliente.whatsapp_financeiro      ?? '',
+          cobrar_automaticamente: cliente.cobrar_automaticamente   ?? false,
         }
       : EMPTY
     )
@@ -204,6 +242,79 @@ export default function ModalCliente({ open, onClose, onSave, cliente }) {
             placeholder="Ex: pagamento parcial, renegociação..." />
         </Field>
 
+        {/* ── Seção Contato ─────────────────────────────────── */}
+        <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+          <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">Contato</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Empresa">
+              <input className={INPUT_CLS} value={form.empresa} onChange={e => set('empresa', e.target.value)} placeholder="Nome da empresa" />
+            </Field>
+            <Field label="CNPJ / CPF">
+              <input className={INPUT_CLS} value={form.cnpj_cpf} onChange={e => set('cnpj_cpf', e.target.value)} placeholder="00.000.000/0000-00" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Field label="E-mail Principal">
+              <input className={INPUT_CLS} type="email" value={form.email_principal} onChange={e => set('email_principal', e.target.value)} placeholder="contato@empresa.com" />
+            </Field>
+            <Field label="E-mail Financeiro">
+              <input className={INPUT_CLS} type="email" value={form.email_financeiro}
+                onChange={e => set('email_financeiro', e.target.value)}
+                placeholder="financeiro@empresa.com" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Field label="Telefone">
+              <input className={INPUT_CLS} type="tel" value={form.telefone} onChange={e => set('telefone', e.target.value)} placeholder="(11) 3000-0000" />
+            </Field>
+            <Field label="WhatsApp">
+              <input className={INPUT_CLS} type="tel" value={form.whatsapp} onChange={e => set('whatsapp', e.target.value)} placeholder="11999999999" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Field label="Contato Principal (nome)">
+              <input className={INPUT_CLS} value={form.nome_contato_principal} onChange={e => set('nome_contato_principal', e.target.value)} placeholder="Nome" />
+            </Field>
+            <Field label="Contato Financeiro (nome)">
+              <input className={INPUT_CLS} value={form.nome_contato_financeiro} onChange={e => set('nome_contato_financeiro', e.target.value)} placeholder="Nome" />
+            </Field>
+          </div>
+        </div>
+
+        {/* ── Seção Fiscal / Faturamento ──────────────────── */}
+        <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+          <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">Fiscal / Faturamento</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Razão Social">
+              <input className={INPUT_CLS} value={form.razao_social} onChange={e => set('razao_social', e.target.value)} placeholder="Razão social" />
+            </Field>
+            <Field label="CNPJ Faturamento">
+              <input className={INPUT_CLS} value={form.cnpj_faturamento} onChange={e => set('cnpj_faturamento', e.target.value)} placeholder="00.000.000/0000-00" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <Field label="Código Serviço NF">
+              <input className={INPUT_CLS} value={form.codigo_servico_nf} onChange={e => set('codigo_servico_nf', e.target.value)} placeholder="Ex: 17.01" />
+            </Field>
+            <Field label="Forma de Cobrança">
+              <select className={INPUT_CLS} value={form.forma_cobranca} onChange={e => set('forma_cobranca', e.target.value)}>
+                <option value="">Selecione</option>
+                {FORMA_COBRANCA_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Descrição Padrão da NF">
+              <textarea className={INPUT_CLS + ' resize-none'} rows={2} value={form.descricao_padrao_nf} onChange={e => set('descricao_padrao_nf', e.target.value)} placeholder="Descrição que aparece na nota fiscal" />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Observações Fiscais">
+              <textarea className={INPUT_CLS + ' resize-none'} rows={2} value={form.observacoes_fiscais} onChange={e => set('observacoes_fiscais', e.target.value)} placeholder="Informações fiscais adicionais" />
+            </Field>
+          </div>
+        </div>
+
         {/* ── Seção Cobrança ─────────────────────────────────── */}
         <div className="pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
           <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">Cobrança</p>
@@ -242,15 +353,15 @@ export default function ModalCliente({ open, onClose, onSave, cliente }) {
             Automação de Cobrança <span className="normal-case text-gray-600 font-normal">(em breve)</span>
           </p>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="E-mail Financeiro">
-              <input className={INPUT_CLS} type="email" value={form.email_financeiro}
-                onChange={e => set('email_financeiro', e.target.value)}
-                placeholder="financeiro@empresa.com" />
-            </Field>
             <Field label="WhatsApp Financeiro">
               <input className={INPUT_CLS} type="tel" value={form.whatsapp_financeiro}
                 onChange={e => set('whatsapp_financeiro', e.target.value)}
                 placeholder="11999999999" />
+            </Field>
+            <Field label="Forma de Contato Preferida">
+              <select className={INPUT_CLS} value={form.forma_contato} onChange={e => set('forma_contato', e.target.value)}>
+                {FORMA_CONTATO_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </Field>
           </div>
           <div className="mt-4 flex items-center gap-3">

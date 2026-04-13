@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { financeiroAPI, healthAPI, clientesAPI, cortesAPI, quickUpdateAPI, projetosAdicionaisAPI, comissoesAPI, despesasLocaisAPI } from '../services/api'
+import { financeiroAPI, healthAPI, clientesAPI, cortesAPI, quickUpdateAPI, projetosAdicionaisAPI, comissoesAPI, despesasLocaisAPI, fechamentoAPI } from '../services/api'
 
 /**
  * Hook genérico para buscar dados de um endpoint.
@@ -54,6 +54,13 @@ export function useProjecoes(params) {
 export const useProjetosAdicionais = () => useApiData(() => projetosAdicionaisAPI.getAll())
 export const useComissoes           = () => useApiData(() => comissoesAPI.getAll())
 export const useDespesasLocais      = () => useApiData(() => despesasLocaisAPI.getAll())
+
+export function useFechamento(competencia) {
+  return useApiData(
+    () => fechamentoAPI.get(competencia),
+    [competencia]
+  )
+}
 
 // ── Fluxo de Caixa ───────────────────────────────────────────────────────
 

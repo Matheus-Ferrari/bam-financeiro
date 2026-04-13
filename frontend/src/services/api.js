@@ -101,4 +101,12 @@ export const despesasLocaisAPI = {
   remove: (id)       => api.delete(`/despesas-locais/${id}`),
 }
 
+export const fechamentoAPI = {
+  getAll:  ()              => api.get('/fechamento'),
+  get:     (competencia)   => api.get(`/fechamento/${competencia}`),
+  save:    (data)          => api.post('/fechamento', data),
+  update:  (id, data)      => api.put(`/fechamento/${id}`, data),
+  remove:  (id)            => api.delete(`/fechamento/${id}`),
+}
+
 export default api

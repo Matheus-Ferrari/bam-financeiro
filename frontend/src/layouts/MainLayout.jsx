@@ -1,47 +1,32 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard,
-  TrendingUp,
-  TrendingDown,
-  BarChart2,
-  Sliders,
   Settings,
   ChevronRight,
   Users,
   HeartPulse,
   FolderPlus,
-  Award,
-  CreditCard,
   Wallet,
+  CalendarCheck,
 } from 'lucide-react'
 import { useHealth } from '../hooks/useFinanceiro'
 
 const NAV_ITEMS = [
-  { to: '/dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
-  { to: '/fluxo-caixa',         label: 'Fluxo de Caixa',      icon: Wallet          },
-  { to: '/clientes',            label: 'Clientes',            icon: Users           },
-  { to: '/receitas',            label: 'Receitas',            icon: TrendingUp      },
-  { to: '/despesas',            label: 'Despesas',            icon: TrendingDown    },
-  { to: '/despesas-locais',     label: 'Despesas Fixas',      icon: CreditCard      },
+  { to: '/dashboard',           label: 'Dashboard',          icon: LayoutDashboard },
+  { to: '/fluxo-caixa',         label: 'Fluxo de Caixa',     icon: Wallet          },
+  { to: '/clientes',            label: 'Clientes',           icon: Users           },
+  { to: '/fechamento',          label: 'Fechamento do Mês',  icon: CalendarCheck   },
   { to: '/projetos-adicionais', label: 'Proj. Adicionais',   icon: FolderPlus      },
-  { to: '/comissoes',           label: 'Comissões',           icon: Award           },
-  { to: '/projecoes',           label: 'Projeções',           icon: BarChart2       },
-  { to: '/cenarios',            label: 'Cenários',            icon: Sliders         },
-  { to: '/saude',               label: 'Saúde Financeira',    icon: HeartPulse      },
-  { to: '/configuracoes',       label: 'Configurações',       icon: Settings        },
+  { to: '/saude',               label: 'Saúde Financeira',   icon: HeartPulse      },
+  { to: '/configuracoes',       label: 'Configurações',      icon: Settings        },
 ]
 
 const PAGE_TITLES = {
   '/dashboard':           'Dashboard',
   '/fluxo-caixa':         'Fluxo de Caixa',
-  '/receitas':            'Receitas',
-  '/despesas':            'Despesas',
-  '/despesas-locais':     'Despesas Fixas',
-  '/projetos-adicionais': 'Projetos Adicionais',
-  '/comissoes':           'Comissões',
-  '/projecoes':           'Projeções',
-  '/cenarios':            'Cenários',
   '/clientes':            'Clientes',
+  '/fechamento':          'Fechamento do Mês',
+  '/projetos-adicionais': 'Projetos Adicionais',
   '/saude':               'Saúde Financeira',
   '/configuracoes':       'Configurações',
 }

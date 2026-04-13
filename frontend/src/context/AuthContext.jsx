@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
           const res = await authAPI.me()
           setUser(res.data)
         } catch {
-          setUser(null)
+          setUser({ name: 'Usuário', offline: true })
         }
       } finally {
         setLoading(false)
