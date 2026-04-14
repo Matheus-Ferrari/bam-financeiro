@@ -1,5 +1,5 @@
 import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Info, TrendingUp, TrendingDown, Users, Clock, BarChart2, PieChart, Scissors } from 'lucide-react'
-import { useSaude, useInsights } from '../hooks/useFinanceiro'
+import { useSaude, useInsights, useResumo } from '../hooks/useFinanceiro'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -34,11 +34,13 @@ const INSIGHT_CONFIG = {
 export default function SaudeFinanceira() {
   const saude    = useSaude()
   const insights = useInsights()
+  const resumo   = useResumo()
 
-  const s  = saude.data
-  const ins = insights.data?.insights ?? []
+  const s    = saude.data
+  const ins  = insights.data?.insights ?? []
+  const meses = resumo.data?.meses ?? []
 
-  const refetchAll = () => { saude.refetch(); insights.refetch() }
+  const refetchAll = () => { saude.refetch(); insights.refetch(); resumo.refetch() }
 
   if (saude.loading) return <LoadingSpinner label="Calculando saúde financeira..." />
   if (saude.error)   return <p className="text-red-400 text-sm">{saude.error}</p>
@@ -181,6 +183,63 @@ export default function SaudeFinanceira() {
                 </div>
               )
             })}
+          </div>
+        </Card>
+      )}
+
+      {/* Evolução Mensal */}
+      {meses.length > 0 && (
+        <Card title="Evolução Mensal" subtitle="Receita, despesa e resultado por competência">
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-white/5">
+                  {['Mês', 'Receita', 'Despesa', 'Resultado', 'Margem'].map(h => (
+                    <th key={h} className="text-left text-gray-500 font-medium pb-2 pr-4 last:pr-0">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {meses.map((m, i) => {
+                  const pos = (m.resultado ?? 0) >= 0
+                  const margem = m.margem_pct ?? (m.receita ? ((m.resultado ?? 0) / m.receita) * 100 : 0)
+                  return (
+                    <tr key={i} className="border-b border-white/5 last:border-0 hover:bg-white/[0.02]">
+                      <td className="py-2.5 pr-4 text-gray-300 font-medium">{m.mes}</td>
+                      <td className="py-2.5 pr-4" style={{ color: '#12F0C6' }}>{formatCompact(m.receita)}</td>
+                      <td className="py-2.5 pr-4" style={{ color: '#6366F1' }}>{formatCompact(m.despesa)}</td>
+                      <td className="py-2.5 pr-4 font-semibold" style={{ color: pos ? '#12F0C6' : '#EF4444' }}>
+                        {pos ? '+' : ''}{formatCompact(m.resultado ?? 0)}
+                      </td>
+                      <td className="py-2.5 font-semibold" style={{ color: margem >= 10 ? '#12F0C6' : margem >= 0 ? '#F59E0B' : '#EF4444' }}>
+                        {margem.toFixed(1)}%
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              {meses.length > 1 && (() => {
+                const totR = meses.reduce((s, m) => s + m.receita, 0)
+                const totD = meses.reduce((s, m) => s + m.despesa, 0)
+                const totRes = totR - totD
+                const totMarg = totR ? (totRes / totR) * 100 : 0
+                return (
+                  <tfoot>
+                    <tr className="border-t border-white/10">
+                      <td className="pt-3 text-gray-500 font-semibold">Total</td>
+                      <td className="pt-3 font-semibold" style={{ color: '#12F0C6' }}>{formatCompact(totR)}</td>
+                      <td className="pt-3 font-semibold" style={{ color: '#6366F1' }}>{formatCompact(totD)}</td>
+                      <td className="pt-3 font-bold" style={{ color: totRes >= 0 ? '#12F0C6' : '#EF4444' }}>
+                        {totRes >= 0 ? '+' : ''}{formatCompact(totRes)}
+                      </td>
+                      <td className="pt-3 font-bold" style={{ color: totMarg >= 10 ? '#12F0C6' : totMarg >= 0 ? '#F59E0B' : '#EF4444' }}>
+                        {totMarg.toFixed(1)}%
+                      </td>
+                    </tr>
+                  </tfoot>
+                )
+              })()}
+            </table>
           </div>
         </Card>
       )}

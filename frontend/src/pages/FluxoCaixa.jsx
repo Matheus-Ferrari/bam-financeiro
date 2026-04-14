@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from 'react'
+﻿import { useState, useMemo, useCallback } from 'react'
 import {
   RefreshCw, TrendingUp, TrendingDown, DollarSign, CheckCircle,
   AlertCircle, Clock, Filter, X, ChevronDown, Users,
   ArrowUpCircle, ArrowDownCircle, Banknote, Search, Edit2, Save,
+  Plus, Trash2,
 } from 'lucide-react'
 import {
   useFluxoCaixa,
@@ -122,6 +123,22 @@ function TabFluxo() {
   const [editingId, setEditingId]   = useState(null)
   const [editRow, setEditRow]       = useState({})
   const [saving, setSaving]         = useState(false)
+
+  // Create new lancamento
+  const FORM_EMPTY = {
+    data_competencia: new Date().toISOString().slice(0, 10),
+    descricao: '', cliente: '', categoria: 'Ajuste Manual',
+    tipo: 'entrada', valor_previsto: '', valor_realizado: '0',
+    status: 'previsto', origem: 'ajuste_manual', observacao: '',
+  }
+  const [createOpen, setCreateOpen]     = useState(false)
+  const [createForm, setCreateForm]     = useState(FORM_EMPTY)
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createErr, setCreateErr]       = useState('')
+
+  // Delete manual
+  const [confirmDel, setConfirmDel] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
   // Monta params para o backend
   const params = useMemo(() => {
@@ -279,6 +296,37 @@ function TabFluxo() {
     }
   }
 
+  // ── Criar lançamento manual ──────────────────────────────────────────
+  const handleCreate = async () => {
+    if (!createForm.descricao.trim()) { setCreateErr('Descrição é obrigatória.'); return }
+    if (!createForm.valor_previsto)   { setCreateErr('Valor é obrigatório.'); return }
+    setCreateSaving(true); setCreateErr('')
+    try {
+      await financeiroAPI.createLancamento({
+        ...createForm,
+        valor_previsto:  parseFloat(createForm.valor_previsto)  || 0,
+        valor_realizado: parseFloat(createForm.valor_realizado) || 0,
+      })
+      setCreateOpen(false)
+      setCreateForm(FORM_EMPTY)
+      refetch()
+    } catch (e) {
+      setCreateErr(e?.response?.data?.detail || 'Erro ao criar lançamento.')
+    } finally { setCreateSaving(false) }
+  }
+
+  // ── Deletar lançamento manual ────────────────────────────────────────
+  const handleDeleteManual = async (id) => {
+    setDeletingId(id)
+    try {
+      await financeiroAPI.deleteLancamento(id)
+      setConfirmDel(null)
+      refetch()
+    } catch (e) {
+      alert('Erro ao excluir: ' + (e?.response?.data?.detail || e.message))
+    } finally { setDeletingId(null) }
+  }
+
   const meses = [
     { v: 1, l: 'Janeiro' }, { v: 2, l: 'Fevereiro' }, { v: 3, l: 'Março' },
     { v: 4, l: 'Abril' },   { v: 5, l: 'Maio' },      { v: 6, l: 'Junho' },
@@ -408,10 +456,18 @@ function TabFluxo() {
         </div>
       </Card>
 
-      {/* â”€â”€ Tabela principal â”€â”€ */}
+      {/* ── Tabela principal ── */}
       <Card
         title="Lançamentos"
-        subtitle={`${filtrados.length} registros · clique em âœ para editar inline`}
+        subtitle={`${filtrados.length} lançamentos · ✎ editar inline · 🗑 excluir manuais`}
+        action={
+          <button
+            onClick={() => { setCreateForm(FORM_EMPTY); setCreateErr(""); setCreateOpen(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-black"
+            style={{ background: "#12F0C6" }}>
+            <Plus size={12} /> Novo Lançamento
+          </button>
+        }
       >
         {loading ? <LoadingSpinner label="Carregando fluxo..." /> :
          error   ? <p className="text-red-400 text-sm">{error}</p> :
@@ -619,6 +675,16 @@ function TabFluxo() {
                                 â†º
                               </button>
                             )}
+                            {l.fonte === "manual" && (
+                              <button
+                                disabled={deletingId === l.id}
+                                onClick={() => setConfirmDel(l)}
+                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                                style={{ background: "rgba(239,68,68,0.12)", color: "#EF4444" }}
+                                title="Excluir lançamento manual">
+                                <Trash2 size={10} />
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -640,6 +706,90 @@ function TabFluxo() {
           <Resumo label="Total Pago"            value={data.total_saidas_realizado}    color="#EF4444" />
         </div>
       )}
+
+    {/* ── Modal: Novo Lançamento ───────────────────────────────── */}
+    {createOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-lg space-y-4">
+          <h2 className="text-white font-semibold text-lg">Novo Lançamento Manual</h2>
+          {createErr && <p className="text-red-400 text-sm">{createErr}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-gray-400 mb-1 block">Descrição *</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.descricao} onChange={e => setCreateForm(f => ({...f, descricao: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Tipo *</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.tipo} onChange={e => setCreateForm(f => ({...f, tipo: e.target.value}))}>
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Data</label>
+              <input type="date" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.data_competencia} onChange={e => setCreateForm(f => ({...f, data_competencia: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Valor Previsto *</label>
+              <input type="number" step="0.01" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.valor_previsto} onChange={e => setCreateForm(f => ({...f, valor_previsto: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Valor Realizado</label>
+              <input type="number" step="0.01" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.valor_realizado} onChange={e => setCreateForm(f => ({...f, valor_realizado: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Categoria</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.categoria} onChange={e => setCreateForm(f => ({...f, categoria: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Status</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.status} onChange={e => setCreateForm(f => ({...f, status: e.target.value}))}>
+                <option value="previsto">Previsto</option>
+                <option value="realizado">Realizado</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Cliente</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.cliente} onChange={e => setCreateForm(f => ({...f, cliente: e.target.value}))}>
+                <option value="">— nenhum —</option>
+                {clientesNomes.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Origem</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.origem} onChange={e => setCreateForm(f => ({...f, origem: e.target.value}))}>
+                <option value="manual">Manual</option>
+                <option value="recorrente">Recorrente</option>
+                <option value="eventual">Eventual</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-gray-400 mb-1 block">Observação</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.observacao} onChange={e => setCreateForm(f => ({...f, observacao: e.target.value}))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => { setCreateOpen(false); setCreateErr(''); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+            <button onClick={handleCreate} disabled={createSaving} className="px-4 py-2 text-sm bg-[#12F0C6] text-black rounded font-semibold hover:opacity-90 disabled:opacity-50">{createSaving ? 'Salvando…' : 'Salvar Lançamento'}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Confirm: Excluir Lançamento ──────────────────────────── */}
+    {confirmDel && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-sm space-y-4">
+          <h2 className="text-white font-semibold text-lg">Excluir lançamento?</h2>
+          <p className="text-gray-400 text-sm">Esta ação não pode ser desfeita. O lançamento <span className="text-white font-medium">{confirmDel.descricao}</span> será removido permanentemente.</p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setConfirmDel(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+            <button onClick={() => handleDeleteManual(confirmDel.id)} disabled={!!deletingId} className="px-4 py-2 text-sm bg-red-500 text-white rounded font-semibold hover:opacity-90 disabled:opacity-50">{deletingId ? 'Excluindo…' : 'Excluir'}</button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   )
 }

@@ -143,6 +143,20 @@ router.post("/lancamento/update", async (req, res) => {
   } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
 });
 
+// POST /financeiro/lancamento/create
+router.post("/lancamento/create", async (req, res) => {
+  try {
+    res.json(await fluxoService.createManual(req.body));
+  } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
+});
+
+// DELETE /financeiro/lancamento/:id
+router.delete("/lancamento/:id", async (req, res) => {
+  try {
+    res.json(await fluxoService.deleteManual(req.params.id));
+  } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
+});
+
 // ── Edição de base de dados (antigo Excel) ────────────────────────────
 
 // PUT /financeiro/despesas/:id

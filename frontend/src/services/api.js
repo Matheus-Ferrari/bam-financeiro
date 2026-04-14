@@ -58,7 +58,9 @@ export const financeiroAPI = {
   marcarConciliacao:       (data)    => api.post('/financeiro/conciliacao/marcar', data),
   getRecebimentosClientes: (params)  => api.get('/financeiro/recebimentos-clientes', { params }),
   updateLancamentoStatus:  (data)    => api.post('/financeiro/lancamento/status', data),
-  updateLancamento:        (id, data) => api.put(`/financeiro/lancamento/${id}`, data),
+  updateLancamento:        (id, data) => api.post('/financeiro/lancamento/update', { lancamento_id: id, ...data }),
+  createLancamento:        (data)    => api.post('/financeiro/lancamento/create', data),
+  deleteLancamento:        (id)      => api.delete(`/financeiro/lancamento/${id}`),
 }
 
 export const quickUpdateAPI = {

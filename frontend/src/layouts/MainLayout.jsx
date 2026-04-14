@@ -5,30 +5,27 @@ import {
   ChevronRight,
   Users,
   HeartPulse,
-  FolderPlus,
   Wallet,
   CalendarCheck,
 } from 'lucide-react'
 import { useHealth } from '../hooks/useFinanceiro'
 
 const NAV_ITEMS = [
-  { to: '/dashboard',           label: 'Dashboard',          icon: LayoutDashboard },
-  { to: '/fluxo-caixa',         label: 'Fluxo de Caixa',     icon: Wallet          },
-  { to: '/clientes',            label: 'Clientes',           icon: Users           },
-  { to: '/fechamento',          label: 'Fechamento do Mês',  icon: CalendarCheck   },
-  { to: '/projetos-adicionais', label: 'Proj. Adicionais',   icon: FolderPlus      },
-  { to: '/saude',               label: 'Saúde Financeira',   icon: HeartPulse      },
-  { to: '/configuracoes',       label: 'Configurações',      icon: Settings        },
+  { to: '/dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
+  { to: '/fluxo-caixa', label: 'Fluxo de Caixa',    icon: Wallet          },
+  { to: '/clientes',    label: 'Clientes',          icon: Users           },
+  { to: '/fechamento',  label: 'Fechamento do Mês', icon: CalendarCheck   },
+  { to: '/saude',       label: 'Saúde Financeira',  icon: HeartPulse      },
+  { to: '/configuracoes', label: 'Configurações',   icon: Settings        },
 ]
 
 const PAGE_TITLES = {
-  '/dashboard':           'Dashboard',
-  '/fluxo-caixa':         'Fluxo de Caixa',
-  '/clientes':            'Clientes',
-  '/fechamento':          'Fechamento do Mês',
-  '/projetos-adicionais': 'Projetos Adicionais',
-  '/saude':               'Saúde Financeira',
-  '/configuracoes':       'Configurações',
+  '/dashboard':     'Dashboard',
+  '/fluxo-caixa':   'Fluxo de Caixa',
+  '/clientes':      'Clientes',
+  '/fechamento':    'Fechamento do Mês',
+  '/saude':         'Saúde Financeira',
+  '/configuracoes': 'Configurações',
 }
 
 export default function MainLayout() {

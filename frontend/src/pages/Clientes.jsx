@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   Users, Plus, Search, RefreshCw, Edit2, Trash2, DollarSign, CheckCircle,
   TrendingUp, AlertTriangle, Phone, MessageCircle, Mail, Eye, Copy, Clock,
-  FileText, Receipt,
+  FileText, Receipt, FolderPlus,
 } from 'lucide-react'
 import { useClientes, useFechamento } from '../hooks/useFinanceiro'
 import { clientesAPI } from '../services/api'
+import ProjetosAdicionais from './ProjetosAdicionais'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -293,11 +294,12 @@ export default function Clientes() {
         <KpiMini icon={<AlertTriangle size={15} style={{ color: '#EF4444' }} />}       label="Em Atraso" value={emAtraso}                                   color="#EF4444" />
       </div>
 
-      {/* Abas: Clientes | Cobrança & Faturamento */}
+      {/* Abas: Clientes | Cobrança | Proj. Adicionais */}
       <div className="flex items-center gap-2 border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
         {[
-          { key: 'clientes',  label: 'Clientes',              icon: Users },
-          { key: 'cobranca',  label: 'Cobrança & Faturamento',icon: Receipt },
+          { key: 'clientes',  label: 'Clientes',              icon: Users      },
+          { key: 'cobranca',  label: 'Cobrança & Faturamento',icon: Receipt    },
+          { key: 'projetos',  label: 'Proj. Adicionais',      icon: FolderPlus },
         ].map(tab => (
           <button
             key={tab.key}
@@ -665,6 +667,9 @@ export default function Clientes() {
           </Card>
         </div>
       )}
+
+      {/* ═══ ABA: PROJETOS ADICIONAIS ═══ */}
+      {abaAtiva === 'projetos' && <ProjetosAdicionais />}
 
       {/* Drawer detalhes */}
       <DrawerCliente

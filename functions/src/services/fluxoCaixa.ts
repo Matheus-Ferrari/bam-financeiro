@@ -333,4 +333,27 @@ export class FluxoCaixaService {
     }
     return { ok: true, lancamento_id: params.lancamento_id };
   }
+
+  async createManual(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const payload: Record<string, unknown> = {
+      ...data,
+      fonte: "manual",
+      tipo: data.tipo || "entrada",
+      status: data.status || "previsto",
+      status_conciliacao: "pendente",
+      origem: data.origem || "ajuste_manual",
+      valor_previsto: parseFloat(String(data.valor_previsto ?? "0")) || 0,
+      valor_realizado: parseFloat(String(data.valor_realizado ?? "0")) || 0,
+      criado_em: new Date().toISOString(),
+    };
+    return await movimentacoesStorage.create(payload);
+  }
+
+  async deleteManual(id: string): Promise<Record<string, unknown>> {
+    const movs = await movimentacoesStorage.all();
+    const mov = movs.find((m) => String(m.id) === id);
+    if (!mov) throw new Error("Lançamento não encontrado ou não é manual");
+    await movimentacoesStorage.delete(id);
+    return { ok: true, id };
+  }
 }
