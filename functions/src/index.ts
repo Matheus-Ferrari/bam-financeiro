@@ -33,6 +33,7 @@ const ALLOWED_ORIGINS = [
   "http://127.0.0.1:5175",
   "https://bam-financeiro.web.app",
   "https://bam-financeiro.firebaseapp.com",
+  "https://matheus-ferrari.github.io",
 ];
 
 app.use(cors({

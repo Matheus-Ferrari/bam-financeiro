@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:5001/bam-financeiro/us-central1/api'
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/bam-financeiro/us-central1/api'
 
 const api = axios.create({
   baseURL:         BASE,
@@ -16,7 +16,7 @@ api.interceptors.response.use(
     const is401       = error.response?.status === 401
     const isAuthRoute = error.config?.url?.includes('/auth/')
     if (is401 && !isAuthRoute) {
-      window.location.href = '/'
+      window.location.href = import.meta.env.BASE_URL || '/'
     }
     return Promise.reject(error)
   }

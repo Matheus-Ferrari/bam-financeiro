@@ -59,7 +59,7 @@ export default function Login() {
         <div className="px-8 pt-10 pb-8 space-y-7">
           {/* logo + título */}
           <div className="flex flex-col items-center gap-4">
-            <img src="/LogoBam.png" alt="BAM Financeiro" className="h-12 w-auto object-contain" />
+            <img src={import.meta.env.BASE_URL + 'LogoBam.png'} alt="BAM Financeiro" className="h-12 w-auto object-contain" />
             <div className="text-center">
               <h1 className="text-white font-semibold text-base">BAM Financeiro</h1>
               <p className="text-xs text-gray-500 mt-1">Acesso restrito · Faça login para continuar</p>

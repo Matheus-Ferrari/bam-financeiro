@@ -94,7 +94,7 @@ export function cookieOptions(): Record<string, unknown> {
   return {
     httpOnly: true,
     secure: prod,
-    sameSite: "lax",
+    sameSite: prod ? "none" : "lax",
     maxAge: TOKEN_EXPIRE_SECONDS * 1000,
     path: "/",
   };
