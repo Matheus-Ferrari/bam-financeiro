@@ -23,7 +23,13 @@ router.post("/login", async (req, res) => {
 
 // POST /auth/logout
 router.post("/logout", (_req, res) => {
-  res.clearCookie(COOKIE_NAME, { path: "/" });
+  const prod = process.env.NODE_ENV !== "development";
+  res.clearCookie(COOKIE_NAME, {
+    path: "/",
+    httpOnly: true,
+    secure: prod,
+    sameSite: prod ? "none" : "lax",
+  });
   res.json({ ok: true });
 });
 
