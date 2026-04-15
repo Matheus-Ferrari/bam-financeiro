@@ -9,6 +9,7 @@ import {
   conciliacaoStorage,
   movimentacoesStorage,
   statusOverridesStorage,
+  fechamentoStorage,
 } from "../lib/firestore";
 import { FinanceiroService, ReceitaDoc, DespesaDoc } from "./financeiro";
 import * as calendar from "../lib/calendar";
@@ -145,6 +146,92 @@ export class FluxoCaixaService {
     }).filter(Boolean) as Record<string, unknown>[];
   }
 
+  // ── Fechamento como fonte de verdade ──────────────────────────────────
+
+  private async loadFechamentoMap(): Promise<Record<string, Record<string, unknown>>> {
+    const all = await fechamentoStorage.all();
+    const map: Record<string, Record<string, unknown>> = {};
+    for (const f of all) {
+      const comp = String(f.competencia || "").slice(0, 7);
+      if (comp) map[comp] = f as Record<string, unknown>;
+    }
+    return map;
+  }
+
+  /**
+   * Converte fechamento.despesas_previstas + novos_gastos para o formato
+   * unificado de lançamentos do Fluxo de Caixa.
+   * Usado quando há fechamento para a competência, substituindo base_despesas.
+   */
+  private buildDespesasFromFechamento(
+    fech: Record<string, unknown>,
+    competencia: string
+  ): Record<string, unknown>[] {
+    const despPrev = (fech.despesas_previstas as Record<string, unknown>[]) || [];
+    const novosGastos = (fech.novos_gastos as Record<string, unknown>[]) || [];
+    const todos = [...despPrev, ...novosGastos];
+    const [ano, mes] = competencia.split("-");
+    const dataComp = `${ano}-${mes}-01`;
+
+    return todos.map((item, i) => {
+      const statusRaw = String(item.status || "previsto").toLowerCase();
+      const isPago = statusRaw === "pago";
+      const valor = toFloat(item.valor);
+      const venc = item.vencimento ? String(item.vencimento).slice(0, 10) : dataComp;
+      return {
+        id: `fech_${competencia}_${i + 1}`,
+        data_competencia: dataComp,
+        data_vencimento: venc,
+        data_pagamento: isPago ? venc : null,
+        descricao: String(item.descricao || item.nome || `Despesa ${i + 1}`),
+        cliente: "",
+        categoria: String(item.categoria || "Despesa"),
+        subcategoria: "",
+        tipo: "saida",
+        valor_previsto: round2(valor),
+        valor_realizado: round2(isPago ? valor : 0),
+        status: isPago ? "pago" : "previsto",
+        recorrente: false,
+        origem: origemDespesa(String(item.categoria || "")),
+        forma_pagamento: "",
+        conta_financeira: "conta_principal",
+        conciliado: false,
+        status_conciliacao: "pendente",
+        observacao: String(item.observacao || ""),
+        fonte: "fechamento",
+      };
+    });
+  }
+
+  /**
+   * Constrói a lista de despesas para o Fluxo de Caixa priorizando o
+   * fechamento do mês quando disponível, com fallback para base_despesas.
+   */
+  private async buildDespesasComFechamento(
+    cm: Record<string, Record<string, unknown>>,
+    sm: Record<string, Record<string, unknown>>,
+    fechMap: Record<string, Record<string, unknown>>
+  ): Promise<Record<string, unknown>[]> {
+    const baseDespesas = await this.buildDespesas(cm, sm);
+    const result: Record<string, unknown>[] = [];
+    const fechMonths = new Set<string>();
+
+    for (const [comp, fech] of Object.entries(fechMap)) {
+      const items = (fech.despesas_previstas as Record<string, unknown>[]) || [];
+      if (items.length > 0) {
+        fechMonths.add(comp);
+        result.push(...this.buildDespesasFromFechamento(fech, comp));
+      }
+    }
+    // Meses sem fechamento: usa base_despesas normalmente
+    for (const d of baseDespesas) {
+      if (!fechMonths.has(String(d.data_competencia || "").slice(0, 7))) {
+        result.push(d);
+      }
+    }
+    return result;
+  }
+
   private async buildManuais(cm: Record<string, Record<string, unknown>>): Promise<Record<string, unknown>[]> {
     const movs = await movimentacoesStorage.all();
     return movs
@@ -229,15 +316,16 @@ export class FluxoCaixaService {
 
   async getFluxo(params: { mes?: number; ano?: number; tipo?: string; status?: string; cliente?: string; categoria?: string }): Promise<Record<string, unknown>> {
     const { mes, ano, tipo, status, cliente, categoria } = params;
-    const [cm, sm] = await Promise.all([this.concMap(), this.statusMap()]);
+    const anoRef = ano || new Date().getFullYear();
+    const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
     const cliLanc = await this.buildClientes(cm, sm, mes, ano);
-    const excelLanc = [...await this.buildReceitas(cm, sm), ...await this.buildDespesas(cm, sm), ...await this.buildManuais(cm)];
+    const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
+    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
 
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
     let todos = this.applyFieldOverrides([...deduped, ...cliLanc], sm);
 
-    const anoRef = ano || new Date().getFullYear();
     if (mes) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(`${anoRef}-${String(mes).padStart(2, "0")}`));
     else if (ano) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(String(anoRef)));
     if (tipo && ["entrada", "saida"].includes(tipo)) todos = todos.filter((l) => l.tipo === tipo);
@@ -268,14 +356,15 @@ export class FluxoCaixaService {
   }
 
   async getConciliacao(mes?: number, ano?: number): Promise<Record<string, unknown>> {
-    const [cm, sm] = await Promise.all([this.concMap(), this.statusMap()]);
+    const anoRef = ano || new Date().getFullYear();
+    const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
     const cliLanc = await this.buildClientes(cm, sm, mes, ano);
-    const excelLanc = [...await this.buildReceitas(cm, sm), ...await this.buildDespesas(cm, sm), ...await this.buildManuais(cm)];
+    const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
+    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
     let todos = this.applyFieldOverrides([...deduped, ...cliLanc], sm);
 
-    const anoRef = ano || new Date().getFullYear();
     if (mes) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(`${anoRef}-${String(mes).padStart(2, "0")}`));
 
     const conciliados = todos.filter((l) => l.status_conciliacao === "conciliado");
