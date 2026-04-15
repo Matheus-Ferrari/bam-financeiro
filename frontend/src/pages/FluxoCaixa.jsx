@@ -17,7 +17,7 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
-import { formatCurrency, formatCompact } from '../utils/formatters'
+import { formatCurrency, formatCompact, formatDate } from '../utils/formatters'
 import {
   statusPagamentoBadge,
   statusConciliacaoBadge,
@@ -502,7 +502,7 @@ function TabFluxo() {
                           ? <input type="date" className={CELL_INPUT} style={{ minWidth: 110 }}
                               value={editRow.data_competencia}
                               onChange={e => handleEditChange('data_competencia', e.target.value)} />
-                          : <span className="text-gray-400">{l.data_competencia ?? 'â€”'}</span>
+                          : <span className="text-gray-400">{formatDate(l.data_competencia) || '—'}</span>
                         }
                       </td>
 
@@ -923,7 +923,7 @@ function TabConciliacao() {
                   <tr key={l.id}
                       className="border-b hover:bg-white/[0.02] transition-colors"
                       style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                    <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{l.data_competencia}</td>
+                    <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{formatDate(l.data_competencia)}</td>
                     <td className="py-2 px-3 whitespace-nowrap">
                       <span style={{ color: COR_TIPO[l.tipo] ?? '#9CA3AF' }} className="font-semibold">
                         {tipoLabel(l.tipo)}

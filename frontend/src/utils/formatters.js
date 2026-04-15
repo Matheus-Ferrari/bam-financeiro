@@ -31,3 +31,26 @@ export const formatPercent = (value, decimals = 1, showSign = false) => {
   if (!showSign) return fmt
   return value >= 0 ? `+${fmt}` : `-${fmt}`
 }
+
+/**
+ * Formata data ISO (YYYY-MM-DD) para DD/MM/YYYY sem problemas de fuso horário.
+ * Ex: '2026-04-15' → '15/04/2026'
+ */
+export const formatDate = (value) => {
+  if (!value) return '—'
+  const [yyyy, mm, dd] = String(value).slice(0, 10).split('-')
+  if (!yyyy || !mm || !dd) return String(value)
+  return `${dd}/${mm}/${yyyy}`
+}
+
+/**
+ * Formata data ISO para mês/ano curto: 'Abr/26'
+ */
+export const formatMonthYear = (value) => {
+  if (!value) return '—'
+  const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+  const [yyyy, mm] = String(value).slice(0, 10).split('-')
+  if (!yyyy || !mm) return String(value)
+  const m = parseInt(mm, 10)
+  return `${MESES[m - 1] ?? mm}/${String(yyyy).slice(2)}`
+}
