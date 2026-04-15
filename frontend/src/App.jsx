@@ -3,6 +3,8 @@ import { AuthProvider }    from './context/AuthContext'
 import ProtectedRoute      from './components/auth/ProtectedRoute'
 import MainLayout          from './layouts/MainLayout'
 import Login               from './pages/Login'
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
 import Dashboard           from './pages/Dashboard'
 import Receitas            from './pages/Receitas'
 import Despesas            from './pages/Despesas'
@@ -20,7 +22,7 @@ import FechamentoMes       from './pages/FechamentoMes'
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
+      <Router basename={BASE}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
