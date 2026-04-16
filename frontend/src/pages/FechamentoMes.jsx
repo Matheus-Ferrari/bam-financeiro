@@ -695,7 +695,7 @@ export default function FechamentoMes() {
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
           </Button>
           <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-            <Save size={14} /> {saving ? 'Salvando…' : saved ? 'Salvo âœ“' : 'Salvar'}
+            <Save size={14} /> {saving ? 'Salvando…' : saved ? 'Salvo ✓' : 'Salvar'}
           </Button>
         </div>
       </div>
@@ -847,7 +847,7 @@ export default function FechamentoMes() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold" style={{ color: f >= 0 ? GREEN : '#EF4444' }}>
-                      {f >= 0 ? 'âœ“ Meta coberta' : 'âš  Déficit previsto'}
+                      {f >= 0 ? '✓ Meta coberta' : 'âš  Déficit previsto'}
                     </span>
                     <span className="text-sm font-bold" style={{ color: f >= 0 ? GREEN : '#EF4444' }}>
                       {f >= 0 ? '+' : ''}{formatCurrency(f)}
@@ -1018,7 +1018,7 @@ export default function FechamentoMes() {
                           <span className="text-sm font-bold text-yellow-500 whitespace-nowrap">{formatCurrency(valor)}</span>
                         </div>
                         <div className="mt-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap items-center">
-                          <button onClick={() => aplicarAcaoCli(c, 'pago')} className="text-[11px] px-2 py-1 rounded-md transition" style={{ background: 'rgba(18,240,198,0.1)', color: GREEN }}>âœ“ Pago</button>
+                          <button onClick={() => aplicarAcaoCli(c, 'pago')} className="text-[11px] px-2 py-1 rounded-md transition" style={{ background: 'rgba(18,240,198,0.1)', color: GREEN }}>✓ Pago</button>
                           <button onClick={() => aplicarAcaoCli(c, 'cobrado')} className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 transition text-gray-300">Cobrado</button>
                           <button onClick={() => aplicarAcaoCli(c, 'prometeu')} className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 transition text-gray-300">Prometeu</button>
                           <button onClick={() => aplicarAcaoCli(c, 'atraso')} className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 transition text-red-400/70">Atrasado</button>
@@ -1059,7 +1059,7 @@ export default function FechamentoMes() {
                           <span className="text-sm font-bold text-red-400 whitespace-nowrap">{formatCurrency(valor)}</span>
                         </div>
                         <div className="mt-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity flex-wrap items-center">
-                          <button onClick={() => aplicarAcaoCli(c, 'pago')} className="text-[11px] px-2 py-1 rounded-md transition" style={{ background: 'rgba(18,240,198,0.1)', color: GREEN }}>âœ“ Pago</button>
+                          <button onClick={() => aplicarAcaoCli(c, 'pago')} className="text-[11px] px-2 py-1 rounded-md transition" style={{ background: 'rgba(18,240,198,0.1)', color: GREEN }}>✓ Pago</button>
                           <button onClick={() => aplicarAcaoCli(c, 'cobrado')} className="text-[11px] px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 transition text-gray-300">Cobrado</button>
                           <button onClick={() => openCliModal('edit', c)} className="p-1 rounded hover:bg-white/10 ml-auto" title="Editar"><Edit3 size={12} className="text-gray-500" /></button>
                           <button onClick={() => removeCli(c)} className="p-1 rounded hover:bg-white/10" title="Remover"><Trash2 size={12} className="text-red-400/70" /></button>
@@ -1390,7 +1390,7 @@ export default function FechamentoMes() {
                           <button onClick={() => toggleHubStatus('desplocal', d)}
                                   className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
                                   style={d.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {d.status === 'pago' ? 'âœ“ Pago' : 'â— Pendente'}
+                            {d.status === 'pago' ? '✓ Pago' : 'â— Pendente'}
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -1452,7 +1452,7 @@ export default function FechamentoMes() {
                           <button onClick={() => toggleHubStatus('comissao', c)}
                                   className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
                                   style={c.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {c.status === 'pago' ? 'âœ“ Pago' : 'â— Pendente'}
+                            {c.status === 'pago' ? '✓ Pago' : 'â— Pendente'}
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -1845,7 +1845,7 @@ export default function FechamentoMes() {
                   <p className="text-[11px] text-gray-500">{c.desc}</p>
                   {reservaMinima > 0 && saldoConta > 0 && (
                     <p className="text-[11px] mt-1" style={{ color: (c.value - reservaMinima) >= 0 ? GREEN : '#EF4444' }}>
-                      {(c.value - reservaMinima) >= 0 ? `âœ“ +${formatCurrency(c.value - reservaMinima)} acima da reserva` : `âš  ${formatCurrency(c.value - reservaMinima)} abaixo da reserva`}
+                      {(c.value - reservaMinima) >= 0 ? `✓ +${formatCurrency(c.value - reservaMinima)} acima da reserva` : `âš  ${formatCurrency(c.value - reservaMinima)} abaixo da reserva`}
                     </p>
                   )}
                   <div className="mt-2 h-1.5 rounded-full bg-white/5 overflow-hidden">
@@ -1879,7 +1879,7 @@ export default function FechamentoMes() {
                   { label: 'Saídas Previstas',   value: saidasRestantes,    color: '#EF4444',   icon: ArrowDownCircle,sign: '- ' },
                   { label: 'Economias',          value: totalReducoes,       color: GREEN,       icon: Scissors,       sign: '+ ' },
                   { label: 'Saldo Final',        value: saldoFinalPrevisto, color: saldoFinalPrevisto >= 0 ? GREEN : '#EF4444', icon: Target, sign: '= ' },
-                  { label: 'Folga de Caixa',     value: folga,              color: folga >= 0 ? GREEN : '#EF4444', icon: Shield, sign: reservaMinima > 0 ? (folga >= 0 ? 'âœ“ ' : 'âš  ') : '—' },
+                  { label: 'Folga de Caixa',     value: folga,              color: folga >= 0 ? GREEN : '#EF4444', icon: Shield, sign: reservaMinima > 0 ? (folga >= 0 ? '✓ ' : 'âš  ') : '—' },
                 ].map((item, i) => (
                   <div key={i} className={`rounded-lg p-3 text-center ${i === 4 ? 'ring-1 ring-offset-0' : ''}`}
                        style={{

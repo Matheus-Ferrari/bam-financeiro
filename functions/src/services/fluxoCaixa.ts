@@ -260,13 +260,14 @@ export class FluxoCaixaService {
       });
   }
 
-  private async buildClientes(cm: Record<string, Record<string, unknown>>, sm: Record<string, Record<string, unknown>>, mes?: number, ano?: number): Promise<Record<string, unknown>[]> {
+  private async buildClientes(cm: Record<string, Record<string, unknown>>, sm: Record<string, Record<string, unknown>>, mes?: number, ano?: number, fechMap?: Record<string, Record<string, unknown>>): Promise<Record<string, unknown>[]> {
     const hoje = new Date();
     const mesRef = mes ?? hoje.getMonth() + 1;
     const anoRef = ano ?? hoje.getFullYear();
+    const competencia = `${anoRef}-${String(mesRef).padStart(2, "0")}`;
     const clientes = await clientesStorage.all();
 
-    return clientes
+    const base = clientes
       .filter((c) => c.status === "ativo")
       .map((c) => {
         const valor = toFloat(c.valor_previsto || c.valor_mensal || 0);
@@ -300,6 +301,37 @@ export class FluxoCaixaService {
           observacao: conc.observacao || "", fonte: "cliente",
         };
       }).filter(Boolean) as Record<string, unknown>[];
+
+    // Include manual clients from fechamento.clientes_extras (not in Firestore clientes)
+    const fech = fechMap ? fechMap[competencia] : null;
+    const extras = (fech?.clientes_extras as Record<string, unknown>[]) || [];
+    const existingIds = new Set(base.map((l) => String(l.cliente || "")));
+    const extrasLanc = extras
+      .filter((ex) => !existingIds.has(String(ex.nome || "")))
+      .map((ex, i) => {
+        const valor = toFloat(ex.valor_previsto || ex.valor_mensal || ex.valor || 0);
+        const isPago = String(ex.status_pagamento || "pendente").toLowerCase() === "pago";
+        const dataComp = `${anoRef}-${String(mesRef).padStart(2, "0")}-01`;
+        return {
+          id: `fech_cli_${competencia}_${i + 1}`,
+          data_competencia: dataComp,
+          data_vencimento: dataComp,
+          data_pagamento: isPago ? (ex.data_pagamento || null) : null,
+          descricao: String(ex.nome || `Cliente extra ${i + 1}`),
+          cliente: String(ex.nome || ""),
+          categoria: "Mensalidade",
+          subcategoria: "", tipo: "entrada",
+          valor_previsto: round2(valor),
+          valor_realizado: round2(isPago ? toFloat(ex.valor_recebido || valor) : 0),
+          status: isPago ? "recebido" : "previsto",
+          recorrente: false, origem: "cliente_mensal",
+          forma_pagamento: "", conta_financeira: "conta_principal",
+          conciliado: false, status_conciliacao: "pendente",
+          observacao: String(ex.observacao_pagamento || ""), fonte: "cliente_extra",
+        };
+      });
+
+    return [...base, ...extrasLanc];
   }
 
   private applyFieldOverrides(todos: Record<string, unknown>[], sm: Record<string, Record<string, unknown>>): Record<string, unknown>[] {
@@ -318,7 +350,7 @@ export class FluxoCaixaService {
     const { mes, ano, tipo, status, cliente, categoria } = params;
     const anoRef = ano || new Date().getFullYear();
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
-    const cliLanc = await this.buildClientes(cm, sm, mes, ano);
+    const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
     const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
 
@@ -358,7 +390,7 @@ export class FluxoCaixaService {
   async getConciliacao(mes?: number, ano?: number): Promise<Record<string, unknown>> {
     const anoRef = ano || new Date().getFullYear();
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
-    const cliLanc = await this.buildClientes(cm, sm, mes, ano);
+    const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
     const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));

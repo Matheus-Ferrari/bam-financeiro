@@ -74,7 +74,7 @@ const INPUT_CLS =
   'px-3 py-2 rounded-lg text-xs text-white bg-black/40 border border-white/10 focus:outline-none focus:border-[#12F0C6]/50 placeholder:text-gray-600'
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 1 â€” Fluxo de Caixa
+// Tab 1 — Fluxo de Caixa
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const ORIGENS_OPCOES = [
@@ -140,7 +140,26 @@ function TabFluxo() {
   const [confirmDel, setConfirmDel] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
-  // Monta params para o backend
+  // Column-level filters (unique value dropdowns under each header)
+  const [colFilters, setColFilters] = useState({ data: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
+  const setCol = (col, val) => setColFilters(f => ({ ...f, [col]: val }))
+
+  const colFilteredData = useMemo(() => {
+    let r = filtrados
+    if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
+    if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
+    if (colFilters.categoria) r = r.filter(l => (l.categoria || '') === colFilters.categoria)
+    if (colFilters.tipo)      r = r.filter(l => (l.tipo || '') === colFilters.tipo)
+    if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
+    if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
+    return r
+  }, [filtrados, colFilters])
+
+  const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
+  const uniqueDatas = useMemo(() => [...new Set(filtrados.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [filtrados])
+
+  const COL_SELECT = 'w-full mt-1 text-[10px] bg-black/60 border border-white/10 rounded text-gray-400 focus:outline-none focus:border-[#12F0C6]/40 py-0.5 px-1'
+
   const params = useMemo(() => {
     const p = {}
     if (periodo !== 'todo') {
@@ -459,7 +478,7 @@ function TabFluxo() {
       {/* ── Tabela principal ── */}
       <Card
         title="Lançamentos"
-        subtitle={`${filtrados.length} lançamentos · ✎ editar inline · 🗑 excluir manuais`}
+        subtitle={`${colFilteredData.length} lançamentos · ✎ editar inline · 🗑 excluir manuais`}
         action={
           <button
             onClick={() => { setCreateForm(FORM_EMPTY); setCreateErr(""); setCreateOpen(true) }}
@@ -476,13 +495,58 @@ function TabFluxo() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                  {['Data','Descrição','Cliente','Categoria','Tipo','Previsto','Realizado','Status','Origem','Conc.','Ações'].map(h => (
-                    <th key={h} className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Data</div>
+                    <select value={colFilters.data} onChange={e => setCol('data', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueDatas.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Descrição</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Cliente</div>
+                    <select value={colFilters.cliente} onChange={e => setCol('cliente', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      {uniqueVals('cliente').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Categoria</div>
+                    <select value={colFilters.categoria} onChange={e => setCol('categoria', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueVals('categoria').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Tipo</div>
+                    <select value={colFilters.tipo} onChange={e => setCol('tipo', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      <option value="entrada">Entrada</option>
+                      <option value="saida">Saída</option>
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Previsto</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Realizado</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Status</div>
+                    <select value={colFilters.status} onChange={e => setCol('status', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      {uniqueVals('status').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Origem</div>
+                    <select value={colFilters.origem} onChange={e => setCol('origem', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueVals('origem').map(v => <option key={v} value={v}>{origemLabel(v)}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Conc.</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(l => {
+                {colFilteredData.map(l => {
                   const isEditing = editingId === l.id
                   const isBusy    = atualizando === l.id
                   const rowBg     = isEditing ? 'rgba(18,240,198,0.04)' : undefined
@@ -512,7 +576,7 @@ function TabFluxo() {
                           ? <input type="text" className={CELL_INPUT}
                               value={editRow.descricao}
                               onChange={e => handleEditChange('descricao', e.target.value)} />
-                          : <span className="text-white truncate block max-w-[160px]">{l.descricao || 'â€”'}</span>
+                          : <span className="text-white truncate block max-w-[160px]">{l.descricao || '—'}</span>
                         }
                       </td>
 
@@ -522,10 +586,10 @@ function TabFluxo() {
                           ? <select className={CELL_SELECT}
                               value={editRow.cliente}
                               onChange={e => handleEditChange('cliente', e.target.value)}>
-                              <option value="">â€” Nenhum â€”</option>
+                              <option value="">— Nenhum —</option>
                               {clientesNomes.map(n => <option key={n} value={n}>{n}</option>)}
                             </select>
-                          : <span className="text-gray-300 truncate block max-w-[130px]">{l.cliente || 'â€”'}</span>
+                          : <span className="text-gray-300 truncate block max-w-[130px]">{l.cliente || '—'}</span>
                         }
                       </td>
 
@@ -535,7 +599,7 @@ function TabFluxo() {
                           ? <input type="text" className={CELL_INPUT}
                               value={editRow.categoria}
                               onChange={e => handleEditChange('categoria', e.target.value)} />
-                          : <span className="text-gray-400 truncate block max-w-[110px]">{l.categoria || 'â€”'}</span>
+                          : <span className="text-gray-400 truncate block max-w-[110px]">{l.categoria || '—'}</span>
                         }
                       </td>
 
@@ -601,7 +665,7 @@ function TabFluxo() {
                         }
                       </td>
 
-                      {/* CONCILIADO â€” toggle sempre visível */}
+                      {/* CONCILIADO — toggle sempre visível */}
                       <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 80 }}>
                         <button
                           disabled={atualizando === l.id + '_conc'}
@@ -613,7 +677,7 @@ function TabFluxo() {
                               ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
                               : { background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }
                           }>
-                          {l.status_conciliacao === 'conciliado' ? 'âœ“ Conc.' : '~ Pend.'}
+                          {l.status_conciliacao === 'conciliado' ? '✓ Conc.' : '~ Pend.'}
                         </button>
                       </td>
 
@@ -652,7 +716,7 @@ function TabFluxo() {
                                 className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
                                 style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
                                 title="Marcar como Recebido">
-                                âœ“ Rec.
+                                ✓ Rec.
                               </button>
                             )}
                             {l.tipo === 'saida' && l.status !== 'pago' && (
@@ -662,7 +726,7 @@ function TabFluxo() {
                                 className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
                                 style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}
                                 title="Marcar como Pago">
-                                âœ“ Pago
+                                ✓ Pago
                               </button>
                             )}
                             {(l.status === 'recebido' || l.status === 'pago') && (
@@ -804,7 +868,7 @@ function Resumo({ label, value, color }) {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 2 â€” Conciliação
+// Tab 2 — Conciliação
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabConciliacao() {
@@ -929,8 +993,8 @@ function TabConciliacao() {
                         {tipoLabel(l.tipo)}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || 'â€”'}</td>
-                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || 'â€”'}</td>
+                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || '—'}</td>
+                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || '—'}</td>
                     <td className="py-2 px-3 text-right whitespace-nowrap font-semibold text-white">
                       {formatCurrency(l.valor_previsto)}
                     </td>
@@ -944,7 +1008,7 @@ function TabConciliacao() {
                           className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
                           style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
                           title="Marcar como conciliado">
-                          âœ“ Ok
+                          ✓ Ok
                         </button>
                         <button
                           disabled={marcando === l.id}
@@ -989,7 +1053,7 @@ function TabConciliacao() {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 3 â€” Recebimentos por Cliente
+// Tab 3 — Recebimentos por Cliente
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabRecebimentos() {
@@ -1148,7 +1212,7 @@ function TabRecebimentos() {
                       </td>
                       <td className="py-2 px-3 text-right whitespace-nowrap"
                           style={{ color: c.pendencia > 0 ? '#F59E0B' : '#6B7280' }}>
-                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : 'â€”'}
+                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : '—'}
                       </td>
                       <td className="py-2 px-3 whitespace-nowrap">
                         <p className="text-gray-300">dia {c.dia_pagamento}</p>
@@ -1163,7 +1227,7 @@ function TabRecebimentos() {
                             <button disabled={loading_} onClick={() => handlePagamento(c, 'pago')}
                               className="px-2 py-1 rounded text-[10px] font-medium"
                               style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}>
-                              âœ“ Recebido
+                              ✓ Recebido
                             </button>
                           )}
                           {c.status_pagamento !== 'pago' && (
