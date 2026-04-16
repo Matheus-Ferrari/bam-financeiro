@@ -17,8 +17,9 @@ router.post("/login", async (req, res) => {
     return;
   }
   const token = createToken(String(user.sub));
+  // Also set cookie (dev/same-origin) and return token in body (cross-origin)
   res.cookie(COOKIE_NAME, token, cookieOptions() as Record<string, unknown> as never);
-  res.json({ ok: true, user: { email: user.sub, nome: user.nome, role: user.role } });
+  res.json({ ok: true, token, user: { email: user.sub, nome: user.nome, role: user.role } });
 });
 
 // POST /auth/logout

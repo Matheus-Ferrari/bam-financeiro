@@ -2,11 +2,24 @@ import axios from 'axios'
 
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5001/bam-financeiro/us-central1/api'
 
+export const TOKEN_KEY = 'bam_token'
+export const USER_KEY  = 'bam_user'
+
 const api = axios.create({
   baseURL:         BASE,
   timeout:         15_000,
   headers:         { 'Content-Type': 'application/json' },
-  withCredentials: true,  // envia/recebe cookies em requisições cross-origin
+  withCredentials: true,
+})
+
+// Attach Bearer token from sessionStorage on every request
+api.interceptors.request.use(config => {
+  const token = sessionStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers = config.headers || {}
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
 })
 
 // Interceptor global: reinicia no root em caso de sessão expirada
@@ -16,6 +29,8 @@ api.interceptors.response.use(
     const is401       = error.response?.status === 401
     const isAuthRoute = error.config?.url?.includes('/auth/')
     if (is401 && !isAuthRoute) {
+      sessionStorage.removeItem(TOKEN_KEY)
+      sessionStorage.removeItem(USER_KEY)
       window.location.href = import.meta.env.BASE_URL || '/'
     }
     return Promise.reject(error)

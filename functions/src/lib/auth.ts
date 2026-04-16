@@ -110,9 +110,17 @@ export function requireAuth(
   res: Response,
   next: NextFunction
 ): void {
-  const cookies = (req as Request & { cookies?: Record<string, string> })
-    .cookies || {};
-  const token: string = cookies[COOKIE_NAME] || "";
+  // 1. Try Authorization: Bearer <token> header (cross-origin clients)
+  const authHeader = req.headers["authorization"] || "";
+  let token = "";
+  if (authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    // 2. Fall back to cookie (same-origin / dev)
+    const cookies = (req as Request & { cookies?: Record<string, string> })
+      .cookies || {};
+    token = cookies[COOKIE_NAME] || "";
+  }
   const payload = verifyToken(token);
   if (!payload) {
     res

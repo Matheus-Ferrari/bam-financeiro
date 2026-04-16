@@ -103,7 +103,7 @@ export default function MainLayout() {
           {/* Usuário + Logout */}
           <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
             <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-300 truncate">{user?.email ?? 'Usuário'}</p>
+              <p className="text-xs text-gray-300 truncate">{user?.usuario?.email ?? user?.email ?? 'Usuário'}</p>
             </div>
             <button
               onClick={handleLogout}
