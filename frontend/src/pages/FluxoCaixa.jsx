@@ -144,22 +144,6 @@ function TabFluxo() {
   const [colFilters, setColFilters] = useState({ data: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
   const setCol = (col, val) => setColFilters(f => ({ ...f, [col]: val }))
 
-  const colFilteredData = useMemo(() => {
-    let r = filtrados
-    if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
-    if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
-    if (colFilters.categoria) r = r.filter(l => (l.categoria || '') === colFilters.categoria)
-    if (colFilters.tipo)      r = r.filter(l => (l.tipo || '') === colFilters.tipo)
-    if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
-    if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
-    return r
-  }, [filtrados, colFilters])
-
-  const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
-  const uniqueDatas = useMemo(() => [...new Set(filtrados.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [filtrados])
-
-  const COL_SELECT = 'w-full mt-1 text-[10px] bg-black/60 border border-white/10 rounded text-gray-400 focus:outline-none focus:border-[#12F0C6]/40 py-0.5 px-1'
-
   const params = useMemo(() => {
     const p = {}
     if (periodo !== 'todo') {
@@ -206,6 +190,23 @@ function TabFluxo() {
     if (origemFiltro)    result = result.filter(l => l.origem === origemFiltro)
     return result
   }, [lancamentos, busca, categoriaFiltro, origemFiltro])
+
+  // Column filters aplicados sobre filtrados (declarados aqui, após filtrados)
+  const colFilteredData = useMemo(() => {
+    let r = filtrados
+    if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
+    if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
+    if (colFilters.categoria) r = r.filter(l => (l.categoria || '') === colFilters.categoria)
+    if (colFilters.tipo)      r = r.filter(l => (l.tipo || '') === colFilters.tipo)
+    if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
+    if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
+    return r
+  }, [filtrados, colFilters])
+
+  const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
+  const uniqueDatas = useMemo(() => [...new Set(filtrados.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [filtrados])
+
+  const COL_SELECT = 'w-full mt-1 text-[10px] bg-black/60 border border-white/10 rounded text-gray-400 focus:outline-none focus:border-[#12F0C6]/40 py-0.5 px-1'
 
   // â”€â”€ Edição inline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
