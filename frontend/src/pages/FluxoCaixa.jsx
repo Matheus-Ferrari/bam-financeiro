@@ -141,7 +141,7 @@ function TabFluxo() {
   const [deletingId, setDeletingId] = useState(null)
 
   // Column-level filters (unique value dropdowns under each header)
-  const [colFilters, setColFilters] = useState({ data: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
+  const [colFilters, setColFilters] = useState({ data: '', descricao: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
   const setCol = (col, val) => setColFilters(f => ({ ...f, [col]: val }))
 
   const params = useMemo(() => {
@@ -195,6 +195,7 @@ function TabFluxo() {
   const colFilteredData = useMemo(() => {
     let r = filtrados
     if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
+    if (colFilters.descricao) r = r.filter(l => (l.descricao || '').toLowerCase().includes(colFilters.descricao.toLowerCase()))
     if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
     if (colFilters.categoria) r = r.filter(l => (l.categoria || '') === colFilters.categoria)
     if (colFilters.tipo)      r = r.filter(l => (l.tipo || '') === colFilters.tipo)
@@ -204,7 +205,7 @@ function TabFluxo() {
   }, [filtrados, colFilters])
 
   const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
-  const uniqueDatas = useMemo(() => [...new Set(filtrados.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [filtrados])
+  const uniqueDatas = useMemo(() => [...new Set(lancamentos.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [lancamentos])
 
   const COL_SELECT = 'w-full mt-1 text-[10px] bg-black/60 border border-white/10 rounded text-gray-400 focus:outline-none focus:border-[#12F0C6]/40 py-0.5 px-1'
 
@@ -503,7 +504,17 @@ function TabFluxo() {
                       {uniqueDatas.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                   </th>
-                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Descrição</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Descrição</div>
+                    <input
+                      type="text"
+                      value={colFilters.descricao}
+                      onChange={e => setCol('descricao', e.target.value)}
+                      placeholder="Filtrar..."
+                      className={COL_SELECT}
+                      style={{ width: '100%' }}
+                    />
+                  </th>
                   <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
                     <div>Cliente</div>
                     <select value={colFilters.cliente} onChange={e => setCol('cliente', e.target.value)} className={COL_SELECT}>
@@ -678,7 +689,7 @@ function TabFluxo() {
                               ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
                               : { background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }
                           }>
-                          {l.status_conciliacao === 'conciliado' ? '✓ Conc.' : '~ Pend.'}
+                          {l.status_conciliacao === 'conciliado' ? '✓ Conc.' : '◎ Pend.'}
                         </button>
                       </td>
 
@@ -1025,7 +1036,7 @@ function TabConciliacao() {
                           className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
                           style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}
                           title="Marcar como pendente">
-                          ~ Pend
+                          ◎ Pend
                         </button>
                       </div>
                     </td>

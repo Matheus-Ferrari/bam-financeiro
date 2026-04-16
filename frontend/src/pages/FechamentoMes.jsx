@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   CalendarCheck, RefreshCw, Save, Plus, Trash2, Edit3, ChevronDown, ChevronUp,
   TrendingUp, TrendingDown, Scissors, ShoppingBag, Users,
@@ -365,12 +365,12 @@ export default function FechamentoMes() {
         type: primeiroAlerta.saldo < 0 ? 'error' : 'warning',
         text: primeiroAlerta.saldo < 0
           ? ` Saldo negativo (${formatCurrency(primeiroAlerta.saldo)}) projetado no dia ${primeiroAlerta.dia}/${mes} — mais saídas do que entradas acumuladas até esse ponto`
-          : `âš ï¸ Saldo baixo (${formatCurrency(primeiroAlerta.saldo)}) projetado no dia ${primeiroAlerta.dia}/${mes}`,
+          : `⚠️ Saldo baixo (${formatCurrency(primeiroAlerta.saldo)}) projetado no dia ${primeiroAlerta.dia}/${mes}`,
       })
       const hasIncoming = fluxoDiario.slice(primeiroAlerta.diaN).some(d => d.entrada > 0)
       if (hasIncoming) alertas.push({ type: 'info', text: ' Entradas futuras previstas após essa data irão normalizar o caixa' })
     }
-    if (saldoFinal > 0) alertas.push({ type: 'success', text: `âœ… O mês fecha positivo em ${formatCurrency(saldoFinal)}` })
+    if (saldoFinal > 0) alertas.push({ type: 'success', text: `✅ O mês fecha positivo em ${formatCurrency(saldoFinal)}` })
     else                alertas.push({ type: 'error',   text: ` Pode ser necessário uso de crédito — déficit de ${formatCurrency(Math.abs(saldoFinal))}` })
     return {
       alertas,
@@ -826,7 +826,7 @@ export default function FechamentoMes() {
                   </div>
                 )}
                 {saldoFiltrado >= 0 && saldoFiltrado < 1000 && (
-                  <p className="text-[11px] text-yellow-500 mt-1">âš ï¸ Saldo baixo nesta data</p>
+                  <p className="text-[11px] text-yellow-500 mt-1">⚠️ Saldo baixo nesta data</p>
                 )}
               </div>
             )}
@@ -916,7 +916,7 @@ export default function FechamentoMes() {
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs text-gray-500">
             {hasCliOv
-              ? <span style={{ color: '#F59E0B' }}>â— Dados com ajustes manuais nesta competência</span>
+              ? <span style={{ color: '#F59E0B' }}>◎ Dados com ajustes manuais nesta competência</span>
               : 'Espelhando base de clientes cadastrados'}
           </p>
           <button onClick={() => openCliModal('new')}
@@ -1390,7 +1390,7 @@ export default function FechamentoMes() {
                           <button onClick={() => toggleHubStatus('desplocal', d)}
                                   className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
                                   style={d.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {d.status === 'pago' ? '✓ Pago' : 'â— Pendente'}
+                            {d.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -1452,7 +1452,7 @@ export default function FechamentoMes() {
                           <button onClick={() => toggleHubStatus('comissao', c)}
                                   className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
                                   style={c.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {c.status === 'pago' ? '✓ Pago' : 'â— Pendente'}
+                            {c.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
                           </button>
                         </td>
                         <td className="px-3 py-2.5 text-right">
@@ -1482,8 +1482,8 @@ export default function FechamentoMes() {
             )}
             {insightsData.alertas.map((alert, i) => {
               const cfg = {
-                success: { bg: 'rgba(18,240,198,0.07)',  border: 'rgba(18,240,198,0.22)', color: GREEN,     icon: 'âœ…' },
-                warning: { bg: 'rgba(245,158,11,0.07)',  border: 'rgba(245,158,11,0.22)', color: '#F59E0B', icon: 'âš ï¸' },
+                success: { bg: 'rgba(18,240,198,0.07)',  border: 'rgba(18,240,198,0.22)', color: GREEN,     icon: '✅' },
+                warning: { bg: 'rgba(245,158,11,0.07)',  border: 'rgba(245,158,11,0.22)', color: '#F59E0B', icon: '⚠️' },
                 info:    { bg: 'rgba(99,102,241,0.07)',  border: 'rgba(99,102,241,0.22)', color: '#818CF8', icon: '' },
                 error:   { bg: 'rgba(239,68,68,0.07)',   border: 'rgba(239,68,68,0.22)',  color: '#EF4444', icon: '' },
               }
@@ -1527,7 +1527,7 @@ export default function FechamentoMes() {
             </div>
             <p className="text-[11px] text-gray-600">Valor considerando obrigações futuras (cartão + despesas fixas pendentes de {competencia})</p>
             {despProxMesFonteParcial && (
-              <p className="text-[11px] text-yellow-600 mt-1">âš ï¸ Algumas despesas fixas podem não estar incluídas — sem registro para esta competência</p>
+              <p className="text-[11px] text-yellow-600 mt-1">⚠️ Algumas despesas fixas podem não estar incluídas — sem registro para esta competência</p>
             )}
           </div>
 
@@ -1588,14 +1588,14 @@ export default function FechamentoMes() {
                style={{ background: resultadoProxMes >= 0 ? 'rgba(18,240,198,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${resultadoProxMes >= 0 ? 'rgba(18,240,198,0.15)' : 'rgba(239,68,68,0.15)'}` }}>
             <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">Resultado Estimado</p>
             <p className="text-2xl font-black" style={{ color: resultadoProxMes >= 0 ? GREEN : '#EF4444' }}>{formatCurrency(resultadoProxMes)}</p>
-            <p className="text-[10px] text-gray-600 mt-1">{resultadoProxMes >= 0 ? 'mês positivo' : 'âš ï¸ mês negativo'}</p>
+            <p className="text-[10px] text-gray-600 mt-1">{resultadoProxMes >= 0 ? 'mês positivo' : '⚠️ mês negativo'}</p>
           </div>
         </div>
 
         {/* Detalhamento por categoria */}
         <div className="mt-4 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="px-4 py-2.5" style={{ background: 'rgba(0,0,0,0.3)' }}>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider"> Detalhamento das despesas previstas</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">📋 Detalhamento das despesas previstas</p>
           </div>
           <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
 
@@ -1636,7 +1636,7 @@ export default function FechamentoMes() {
                 <div key="conf">
                   <div className="flex items-center justify-between px-4 py-2.5" style={{ background: 'rgba(239,68,68,0.04)' }}>
                     <div>
-                      <p className="text-xs font-semibold text-red-300">âœ… Confirmadas / pagas</p>
+                      <p className="text-xs font-semibold text-red-300">✅ Confirmadas / pagas</p>
                       <p className="text-[10px] text-gray-600 mt-0.5">{itens.length} itens</p>
                     </div>
                     <p className="text-sm font-bold text-red-300">{formatCurrency(total)}</p>
@@ -1716,7 +1716,7 @@ export default function FechamentoMes() {
             )}
             <div className="flex items-center justify-between px-4 py-2.5">
               <div>
-                <p className="text-xs text-gray-300">Despesas fixas ({despLocaisDoMes.length > 0 ? competencia : 'total geral âš ï¸'})</p>
+                <p className="text-xs text-gray-300">Despesas fixas ({despLocaisDoMes.length > 0 ? competencia : 'total geral ⚠️'})</p>
                 <p className="text-[10px] text-gray-600 mt-0.5">
                   {despLocaisDoMes.length > 0
                     ? `${despLocaisDoMes.length} itens desta competência`
@@ -1742,7 +1742,7 @@ export default function FechamentoMes() {
         {despProxMesFonteParcial && (
           <div className="mt-3 px-4 py-2.5 rounded-lg text-[11px] text-yellow-400"
                style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)' }}>
-            âš ï¸ Despesas Fixas sem registros para {competencia} — usando total de todos os meses como estimativa.
+            ⚠️ Despesas Fixas sem registros para {competencia} — usando total de todos os meses como estimativa.
           </div>
         )}
       </Section>
@@ -1760,7 +1760,7 @@ export default function FechamentoMes() {
               <p className="text-3xl font-black text-red-400">{insightsData.piorDia}</p>
               <p className="text-lg font-bold text-white mt-1">{formatCurrency(insightsData.piorValor)}</p>
               <p className="text-[11px] text-gray-500 mt-2">
-                {insightsData.piorValor < 0 ? 'âš ï¸ Saldo negativo projetado' : insightsData.piorValor < 1000 ? 'âš ï¸ Saldo crítico' : 'Menor saldo previsto'}
+                {insightsData.piorValor < 0 ? '⚠️ Saldo negativo projetado' : insightsData.piorValor < 1000 ? '⚠️ Saldo crítico' : 'Menor saldo previsto'}
               </p>
             </div>
             <div className="rounded-xl p-6"
