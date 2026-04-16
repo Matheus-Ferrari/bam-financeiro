@@ -1,10 +1,8 @@
 /**
- * auth.ts — HMAC token helpers + PBKDF2 password verification.
- * Equivalent to Python backend/app/utils/auth.py
+ * auth.ts — HMAC token helpers + Firebase Authentication verification.
  */
 
 import * as crypto from "crypto";
-import { db } from "./firestore";
 import { Request, Response, NextFunction } from "express";
 
 const SECRET_KEY =
@@ -51,35 +49,40 @@ export function verifyToken(token: string): Record<string, unknown> | null {
   }
 }
 
-// ── Credential verification against Firestore ───────────────────────────
+// ── Credential verification via Firebase Auth REST API ──────────────────
 
 export async function verifyUserCredentials(
   email: string,
   password: string
 ): Promise<Record<string, unknown> | null> {
   try {
-    const snap = await db
-      .collection("usuarios")
-      .where("email", "==", email.trim().toLowerCase())
-      .get();
-    if (snap.empty) return null;
+    // Uses Firebase Identity Platform REST API — verifies against Firebase Authentication
+    const apiKey =
+      process.env.FIREBASE_WEB_API_KEY ||
+      "AIzaSyC3yFQA0Abw8gTvwMGvL4EFarCIRF2sKHg";
+    const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
 
-    const user = snap.docs[0].data();
-    if (user.ativo === false) return null;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+        returnSecureToken: false,
+      }),
+    });
 
-    const salt = (user.salt as string) || "";
-    const savedHash = (user.senha_hash as string) || "";
-    const computed = crypto
-      .pbkdf2Sync(password, salt, 100_000, 32, "sha256")
-      .toString("hex");
+    if (!resp.ok) return null;
 
-    if (!crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(savedHash)))
-      return null;
+    const data = (await resp.json()) as {
+      email?: string;
+      displayName?: string;
+    };
 
     return {
-      sub: email.trim().toLowerCase(),
-      nome: user.nome || "",
-      role: user.role || "user",
+      sub: (data.email || email).trim().toLowerCase(),
+      nome: data.displayName || "BAM Financeiro",
+      role: "admin",
     };
   } catch {
     return null;
