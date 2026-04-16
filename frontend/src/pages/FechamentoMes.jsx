@@ -197,6 +197,15 @@ export default function FechamentoMes() {
   const [hubSaving, setHubSaving]         = useState(false)
   const [hubFormErr, setHubFormErr]       = useState('')
 
+  // Hub inline editing
+  const [hubDespEditIdx,  setHubDespEditIdx]  = useState(null)
+  const [hubDespEditRow,  setHubDespEditRow]  = useState({})
+  const [hubFixaEditId,   setHubFixaEditId]   = useState(null)
+  const [hubFixaEditRow,  setHubFixaEditRow]  = useState({})
+  const [hubComEditId,    setHubComEditId]    = useState(null)
+  const [hubComEditRow,   setHubComEditRow]   = useState({})
+  const [hubInlineSaving, setHubInlineSaving] = useState(false)
+
   // Modal state
   const [modal, setModal]       = useState(null) // { type, item?, index? }
   const [form, setForm]         = useState({})
@@ -537,6 +546,47 @@ export default function FechamentoMes() {
       if (type === 'desplocal') { await despesasLocaisAPI.update(item.id, { status: novo }); refetchDespLocais() }
       else { await comissoesAPI.update(item.id, { status: novo }); refetchComissoesFull() }
     } catch { /* silencioso */ }
+  }
+
+  const toggleCliStatus = (cliente) => {
+    const isPago = cliente.status_pagamento === 'pago'
+    const valor  = parseFloat(cliente.valor_mensal || cliente.valor_previsto || cliente.valor || 0)
+    const patch  = isPago
+      ? { status_pagamento: 'pendente', valor_recebido: 0 }
+      : { status_pagamento: 'pago', valor_recebido: valor, data_pagamento: new Date().toISOString().split('T')[0] }
+    if (cliMn.some(c => c.id === cliente.id)) {
+      persistCliMn(cliMn.map(c => c.id === cliente.id ? { ...c, ...patch } : c))
+    } else {
+      persistCliOv({ ...cliOv, [cliente.id]: { ...(cliOv[cliente.id] || {}), ...patch } })
+      clientesAPI.update(cliente.id, patch).then(() => refetch()).catch(() => {})
+    }
+  }
+
+  const saveHubDespInline = async () => {
+    setHubInlineSaving(true)
+    try {
+      const newDesp = despesas.map((d, i) => i === hubDespEditIdx ? { ...d, ...hubDespEditRow, valor: parseFloat(hubDespEditRow.valor) || 0 } : d)
+      setDespesas(newDesp)
+      setHubDespEditIdx(null)
+      await fechamentoAPI.save({ competencia, despesas_previstas: newDesp, reducoes, novos_gastos: novos, anotacoes })
+    } catch (e) { console.error(e) }
+    finally { setHubInlineSaving(false) }
+  }
+
+  const saveHubFixaInline = async () => {
+    setHubInlineSaving(true)
+    try {
+      await despesasLocaisAPI.update(hubFixaEditId, { ...hubFixaEditRow, valor: parseFloat(hubFixaEditRow.valor) || 0 })
+      refetchDespLocais(); setHubFixaEditId(null)
+    } catch { } finally { setHubInlineSaving(false) }
+  }
+
+  const saveHubComInline = async () => {
+    setHubInlineSaving(true)
+    try {
+      await comissoesAPI.update(hubComEditId, { ...hubComEditRow, valor: parseFloat(hubComEditRow.valor) || 0 })
+      refetchComissoesFull(); setHubComEditId(null)
+    } catch { } finally { setHubInlineSaving(false) }
   }
 
   /* ── Helpers persistência local de clientes ─────────────────── */
@@ -1114,6 +1164,7 @@ export default function FechamentoMes() {
           const todosRec = dataReceitas?.lancamentos ?? []
           // Mês atual: usa clientes do fechamento (status correto)
           const fechRec = allClientes.map(c => ({
+            _cliId: c.id,
             descricao: c.nome,
             categoria: c.servico || c.categoria || 'Cliente',
             cliente:   c.nome,
@@ -1186,7 +1237,7 @@ export default function FechamentoMes() {
                   <thead><tr style={{ background: 'rgba(0,0,0,0.3)' }}>
                     {(hubMostrarTodos
                       ? ['Mês','Descrição','Categoria','Cliente','Status','Valor']
-                      : ['Cliente','Serviço','Valor','Status','Pagamento']
+                      : ['Cliente','Serviço','Valor','Status','Pagamento','']
                     ).map(h => (
                       <th key={h} className="px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                     ))}
@@ -1207,14 +1258,19 @@ export default function FechamentoMes() {
                           <td className="px-3 py-2.5 text-xs text-gray-300">{r.categoria}</td>
                           <td className="px-3 py-2.5 text-xs font-semibold text-right" style={{ color: GREEN }}>{formatCurrency(r.valor)}</td>
                           <td className="px-3 py-2.5">
-                            {(() => {
-                              const s = (r.status || '').toLowerCase()
-                              if (s === 'pago')    return <Badge variant="success" dot>Pago</Badge>
-                              if (s === 'atraso')  return <Badge variant="error" dot>Atrasado</Badge>
-                              return <Badge variant="warning" dot>Pendente</Badge>
-                            })()}
+                            <button title="Clique para alterar status" onClick={() => { const cli = allClientes.find(c => c.id === r._cliId); if (cli) toggleCliStatus(cli) }}>
+                              {(() => {
+                                const s = (r.status || '').toLowerCase()
+                                if (s === 'pago')    return <Badge variant="success" dot>Pago</Badge>
+                                if (s === 'atraso')  return <Badge variant="error" dot>Atrasado</Badge>
+                                return <Badge variant="warning" dot>Pendente</Badge>
+                              })()}
+                            </button>
                           </td>
                           <td className="px-3 py-2.5 text-xs text-gray-400">{r.data_pagamento || '—'}</td>
+                          <td className="px-3 py-2.5 text-right">
+                            <button onClick={() => { const cli = allClientes.find(c => c.id === r._cliId); if (cli) openCliModal('edit', cli) }} className="p-1 text-gray-500 hover:text-white transition" title="Editar"><Edit3 size={13} /></button>
+                          </td>
                         </>)}
                       </tr>
                     ))}
@@ -1232,7 +1288,8 @@ export default function FechamentoMes() {
           const todosExcel = dataDespGlobal?.lancamentos ?? []
           // Mês atual: usa despesas do fechamento (status correto + itens completos)
           // Outros meses: usa Excel
-          const fechDesp = despesas.map(d => ({
+          const fechDesp = despesas.map((d, _idx) => ({
+            _idx,
             descricao:    d.descricao,
             categoria:    d.categoria,
             centro_custo: '',
@@ -1306,38 +1363,89 @@ export default function FechamentoMes() {
                   <thead><tr style={{ background: 'rgba(0,0,0,0.3)' }}>
                     {(hubMostrarTodos
                       ? ['Mês','Descrição','Categoria','Centro de Custo','Valor','Status']
-                      : ['Descrição','Categoria','Vencimento','Valor','Status','Obs.']
+                      : ['Descrição','Categoria','Vencimento','Valor','Status','Obs.','']
                     ).map(h => (
                       <th key={h} className="px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr></thead>
                   <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                     {lnc.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-xs text-gray-600">Nenhum registro</td></tr>}
-                    {lnc.map((d, i) => (
-                      <tr key={i} className="hover:bg-white/[0.02]">
-                        {hubMostrarTodos ? (<>
-                          <td className="px-3 py-2.5 text-xs text-gray-400">{d.mes}</td>
-                          <td className="px-3 py-2.5 text-xs text-white font-medium">{d.descricao}</td>
-                          <td className="px-3 py-2.5 text-xs text-gray-300">{d.categoria}</td>
-                          <td className="px-3 py-2.5"><Badge variant="neutral">{d.centro_custo}</Badge></td>
-                        </>) : (<>
-                          <td className="px-3 py-2.5 text-xs text-white font-medium">{d.descricao}</td>
-                          <td className="px-3 py-2.5 text-xs text-gray-300">{d.categoria}</td>
-                          <td className="px-3 py-2.5 text-xs text-gray-400">{d.vencimento || '—'}</td>
-                        </>)}
-                        <td className="px-3 py-2.5 text-xs font-semibold text-right text-white">{formatCurrency(d.valor)}</td>
-                        <td className="px-3 py-2.5">
-                          {(() => {
-                            const s = (d.status || '').toLowerCase().trim()
-                            if (s === 'pago')       return <Badge variant="success" dot>Pago</Badge>
-                            if (s === 'confirmado') return <Badge variant="info" dot>Confirmado</Badge>
-                            if (s === 'adiado')     return <Badge variant="warning" dot>Adiado</Badge>
-                            return <Badge variant="neutral" dot>Previsto</Badge>
-                          })()}
-                        </td>
-                        {!hubMostrarTodos && <td className="px-3 py-2.5 text-xs text-gray-500">{d.observacao || '—'}</td>}
-                      </tr>
-                    ))}
+                    {lnc.map((d, i) => {
+                      const isEdit = !hubMostrarTodos && hubDespEditIdx === d._idx
+                      const CI = 'w-full px-1.5 py-1 rounded text-xs text-white bg-black/60 border border-white/20 focus:outline-none focus:border-[#12F0C6]/50'
+                      return (
+                        <tr key={i} className="border-b transition-colors" style={{ borderColor: 'rgba(255,255,255,0.03)', background: isEdit ? 'rgba(18,240,198,0.03)' : undefined }}>
+                          {hubMostrarTodos ? (<>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{d.mes}</td>
+                            <td className="px-3 py-2.5 text-xs text-white font-medium">{d.descricao}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-300">{d.categoria}</td>
+                            <td className="px-3 py-2.5"><Badge variant="neutral">{d.centro_custo}</Badge></td>
+                          </>) : isEdit ? (<>
+                            <td className="px-2 py-1"><input className={CI} value={hubDespEditRow.descricao || ''} onChange={e => setHubDespEditRow(r => ({ ...r, descricao: e.target.value }))} /></td>
+                            <td className="px-2 py-1"><input className={CI} value={hubDespEditRow.categoria || ''} onChange={e => setHubDespEditRow(r => ({ ...r, categoria: e.target.value }))} /></td>
+                            <td className="px-2 py-1"><input type="date" className={CI} value={hubDespEditRow.vencimento || ''} onChange={e => setHubDespEditRow(r => ({ ...r, vencimento: e.target.value }))} /></td>
+                          </>) : (<>
+                            <td className="px-3 py-2.5 text-xs text-white font-medium">{d.descricao}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-300">{d.categoria}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{d.vencimento || '—'}</td>
+                          </>)}
+                          {isEdit ? (
+                            <td className="px-2 py-1"><input type="number" step="0.01" className={CI} value={hubDespEditRow.valor ?? ''} onChange={e => setHubDespEditRow(r => ({ ...r, valor: e.target.value }))} /></td>
+                          ) : (
+                            <td className="px-3 py-2.5 text-xs font-semibold text-right text-white">{formatCurrency(d.valor)}</td>
+                          )}
+                          {isEdit ? (
+                            <td className="px-2 py-1">
+                              <select className={CI} value={hubDespEditRow.status || 'previsto'} onChange={e => setHubDespEditRow(r => ({ ...r, status: e.target.value }))}>
+                                <option value="previsto">Previsto</option>
+                                <option value="confirmado">Confirmado</option>
+                                <option value="pago">Pago</option>
+                                <option value="adiado">Adiado</option>
+                              </select>
+                            </td>
+                          ) : (
+                            <td className="px-3 py-2.5">
+                              <button title="Clique para ciclar status" onClick={() => {
+                                if (d._idx === undefined) return
+                                const cycle = { previsto: 'confirmado', confirmado: 'pago', pago: 'adiado', adiado: 'previsto' }
+                                const ns = cycle[(d.status || 'previsto')] || 'previsto'
+                                const newDesp = despesas.map((dd, j) => j === d._idx ? { ...dd, status: ns } : dd)
+                                setDespesas(newDesp)
+                                fechamentoAPI.save({ competencia, despesas_previstas: newDesp, reducoes, novos_gastos: novos, anotacoes }).catch(console.error)
+                              }}>
+                                {(() => {
+                                  const s = (d.status || '').toLowerCase().trim()
+                                  if (s === 'pago')       return <Badge variant="success" dot>Pago</Badge>
+                                  if (s === 'confirmado') return <Badge variant="info" dot>Confirmado</Badge>
+                                  if (s === 'adiado')     return <Badge variant="warning" dot>Adiado</Badge>
+                                  return <Badge variant="neutral" dot>Previsto</Badge>
+                                })()}
+                              </button>
+                            </td>
+                          )}
+                          {!hubMostrarTodos && (isEdit ? (
+                            <td className="px-2 py-1"><input className={CI} value={hubDespEditRow.observacao || ''} onChange={e => setHubDespEditRow(r => ({ ...r, observacao: e.target.value }))} /></td>
+                          ) : (
+                            <td className="px-3 py-2.5 text-xs text-gray-500">{d.observacao || '—'}</td>
+                          ))}
+                          {!hubMostrarTodos && (
+                            <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                              {isEdit ? (
+                                <div className="flex gap-1 justify-end">
+                                  <button disabled={hubInlineSaving} onClick={saveHubDespInline} className="px-2 py-1 rounded text-[10px] font-semibold" style={{ background: 'rgba(18,240,198,0.18)', color: '#12F0C6' }}>Salvar</button>
+                                  <button onClick={() => setHubDespEditIdx(null)} className="px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}>✕</button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-1 justify-end">
+                                  <button onClick={() => { setHubDespEditIdx(d._idx); setHubDespEditRow({ ...despesas[d._idx] }) }} className="p-1 text-gray-500 hover:text-white transition"><Edit3 size={13} /></button>
+                                  <button onClick={() => { const nd = despesas.filter((_, j) => j !== d._idx); setDespesas(nd); fechamentoAPI.save({ competencia, despesas_previstas: nd, reducoes, novos_gastos: novos, anotacoes }).catch(console.error) }} className="p-1 text-gray-500 hover:text-red-400 transition"><Trash2 size={13} /></button>
+                                </div>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1380,25 +1488,45 @@ export default function FechamentoMes() {
                   </tr></thead>
                   <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                     {lista.length === 0 && <tr><td colSpan={6} className="px-3 py-8 text-center text-xs text-gray-600">Nenhum registro</td></tr>}
-                    {lista.map((d, i) => (
-                      <tr key={d.id ?? i} className="hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5 text-xs text-white font-medium">{d.nome}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-400">{d.categoria}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-400">{d.competencia}</td>
-                        <td className="px-3 py-2.5 text-xs font-semibold text-white">{formatCurrency(d.valor)}</td>
-                        <td className="px-3 py-2.5">
-                          <button onClick={() => toggleHubStatus('desplocal', d)}
-                                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
-                                  style={d.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {d.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <button onClick={() => openHubModal('desplocal', d)} className="p-1 text-gray-500 hover:text-white transition mr-1"><Edit3 size={13} /></button>
-                          <button onClick={() => removeHubItem('desplocal', d.id)} className="p-1 text-gray-500 hover:text-red-400 transition"><Trash2 size={13} /></button>
-                        </td>
-                      </tr>
-                    ))}
+                    {lista.map((d, i) => {
+                      const isEdit = hubFixaEditId === d.id
+                      const CI = 'w-full px-1.5 py-1 rounded text-xs text-white bg-black/60 border border-white/20 focus:outline-none focus:border-[#12F0C6]/50'
+                      return (
+                        <tr key={d.id ?? i} className="border-b transition-colors" style={{ borderColor: 'rgba(255,255,255,0.03)', background: isEdit ? 'rgba(18,240,198,0.03)' : undefined }}>
+                          {isEdit ? (<>
+                            <td className="px-2 py-1"><input className={CI} value={hubFixaEditRow.nome || ''} onChange={e => setHubFixaEditRow(r => ({ ...r, nome: e.target.value }))} /></td>
+                            <td className="px-2 py-1"><input className={CI} value={hubFixaEditRow.categoria || ''} onChange={e => setHubFixaEditRow(r => ({ ...r, categoria: e.target.value }))} /></td>
+                            <td className="px-2 py-1 text-xs text-gray-400">{d.competencia}</td>
+                            <td className="px-2 py-1"><input type="number" step="0.01" className={CI} value={hubFixaEditRow.valor ?? ''} onChange={e => setHubFixaEditRow(r => ({ ...r, valor: e.target.value }))} /></td>
+                          </>) : (<>
+                            <td className="px-3 py-2.5 text-xs text-white font-medium">{d.nome}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{d.categoria}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{d.competencia}</td>
+                            <td className="px-3 py-2.5 text-xs font-semibold text-white">{formatCurrency(d.valor)}</td>
+                          </>)}
+                          <td className="px-3 py-2.5">
+                            <button onClick={() => toggleHubStatus('desplocal', d)}
+                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
+                                    style={d.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
+                              {d.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                            {isEdit ? (
+                              <div className="flex gap-1 justify-end">
+                                <button disabled={hubInlineSaving} onClick={saveHubFixaInline} className="px-2 py-1 rounded text-[10px] font-semibold" style={{ background: 'rgba(18,240,198,0.18)', color: '#12F0C6' }}>Salvar</button>
+                                <button onClick={() => setHubFixaEditId(null)} className="px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}>✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={() => { setHubFixaEditId(d.id); setHubFixaEditRow({ ...d, valor: String(d.valor ?? '') }) }} className="p-1 text-gray-500 hover:text-white transition"><Edit3 size={13} /></button>
+                                <button onClick={() => removeHubItem('desplocal', d.id)} className="p-1 text-gray-500 hover:text-red-400 transition"><Trash2 size={13} /></button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1441,26 +1569,47 @@ export default function FechamentoMes() {
                   </tr></thead>
                   <tbody className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                     {lista.length === 0 && <tr><td colSpan={7} className="px-3 py-8 text-center text-xs text-gray-600">Nenhum registro</td></tr>}
-                    {lista.map((c, i) => (
-                      <tr key={c.id ?? i} className="hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5 text-xs text-white font-medium">{c.nome}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-300">{c.responsavel}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-400">{c.regra || '—'}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-400">{c.competencia}</td>
-                        <td className="px-3 py-2.5 text-xs font-semibold text-white">{formatCurrency(c.valor)}</td>
-                        <td className="px-3 py-2.5">
-                          <button onClick={() => toggleHubStatus('comissao', c)}
-                                  className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
-                                  style={c.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
-                            {c.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
-                          </button>
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <button onClick={() => openHubModal('comissao', c)} className="p-1 text-gray-500 hover:text-white transition mr-1"><Edit3 size={13} /></button>
-                          <button onClick={() => removeHubItem('comissao', c.id)} className="p-1 text-gray-500 hover:text-red-400 transition"><Trash2 size={13} /></button>
-                        </td>
-                      </tr>
-                    ))}
+                    {lista.map((c, i) => {
+                      const isEdit = hubComEditId === c.id
+                      const CI = 'w-full px-1.5 py-1 rounded text-xs text-white bg-black/60 border border-white/20 focus:outline-none focus:border-[#12F0C6]/50'
+                      return (
+                        <tr key={c.id ?? i} className="border-b transition-colors" style={{ borderColor: 'rgba(255,255,255,0.03)', background: isEdit ? 'rgba(18,240,198,0.03)' : undefined }}>
+                          {isEdit ? (<>
+                            <td className="px-2 py-1"><input className={CI} value={hubComEditRow.nome || ''} onChange={e => setHubComEditRow(r => ({ ...r, nome: e.target.value }))} /></td>
+                            <td className="px-2 py-1"><input className={CI} value={hubComEditRow.responsavel || ''} onChange={e => setHubComEditRow(r => ({ ...r, responsavel: e.target.value }))} /></td>
+                            <td className="px-2 py-1"><input className={CI} value={hubComEditRow.regra || ''} onChange={e => setHubComEditRow(r => ({ ...r, regra: e.target.value }))} /></td>
+                            <td className="px-2 py-1 text-xs text-gray-400">{c.competencia}</td>
+                            <td className="px-2 py-1"><input type="number" step="0.01" className={CI} value={hubComEditRow.valor ?? ''} onChange={e => setHubComEditRow(r => ({ ...r, valor: e.target.value }))} /></td>
+                          </>) : (<>
+                            <td className="px-3 py-2.5 text-xs text-white font-medium">{c.nome}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-300">{c.responsavel}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{c.regra || '—'}</td>
+                            <td className="px-3 py-2.5 text-xs text-gray-400">{c.competencia}</td>
+                            <td className="px-3 py-2.5 text-xs font-semibold text-white">{formatCurrency(c.valor)}</td>
+                          </>)}
+                          <td className="px-3 py-2.5">
+                            <button onClick={() => toggleHubStatus('comissao', c)}
+                                    className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-md transition"
+                                    style={c.status === 'pago' ? { background: 'rgba(18,240,198,0.1)', color: GREEN } : { background: 'rgba(245,158,11,0.1)', color: '#F59E0B' }}>
+                              {c.status === 'pago' ? '✓ Pago' : '◎ Pendente'}
+                            </button>
+                          </td>
+                          <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                            {isEdit ? (
+                              <div className="flex gap-1 justify-end">
+                                <button disabled={hubInlineSaving} onClick={saveHubComInline} className="px-2 py-1 rounded text-[10px] font-semibold" style={{ background: 'rgba(18,240,198,0.18)', color: '#12F0C6' }}>Salvar</button>
+                                <button onClick={() => setHubComEditId(null)} className="px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}>✕</button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1 justify-end">
+                                <button onClick={() => { setHubComEditId(c.id); setHubComEditRow({ ...c, valor: String(c.valor ?? '') }) }} className="p-1 text-gray-500 hover:text-white transition"><Edit3 size={13} /></button>
+                                <button onClick={() => removeHubItem('comissao', c.id)} className="p-1 text-gray-500 hover:text-red-400 transition"><Trash2 size={13} /></button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
