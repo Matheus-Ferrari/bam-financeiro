@@ -123,8 +123,10 @@ router.get("/conciliacao", async (req, res) => {
 // POST /financeiro/conciliacao/marcar
 router.post("/conciliacao/marcar", async (req, res) => {
   try {
-    const { lancamento_id, status, observacao, valor_extrato } = req.body;
-    res.json(await fluxoService.marcarConciliacao(String(lancamento_id), String(status), observacao ?? "", valor_extrato));
+    const { lancamento_id, status, status_conciliacao, observacao, valor_extrato } = req.body;
+    // Accept both `status_conciliacao` (frontend) and `status` (legacy)
+    const statusFinal = status_conciliacao || status;
+    res.json(await fluxoService.marcarConciliacao(String(lancamento_id), String(statusFinal), observacao ?? "", valor_extrato));
   } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
 });
 

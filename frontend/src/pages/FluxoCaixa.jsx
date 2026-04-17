@@ -125,8 +125,12 @@ function TabFluxo() {
   const [saving, setSaving]         = useState(false)
 
   // Create new lancamento
+  const formDataAtual = () => {
+    const d = new Date(ano, mesNum - 1, Math.min(new Date().getDate(), 28))
+    return d.toISOString().slice(0, 10)
+  }
   const FORM_EMPTY = {
-    data_competencia: new Date().toISOString().slice(0, 10),
+    data_competencia: formDataAtual(),
     descricao: '', cliente: '', categoria: 'Ajuste Manual',
     tipo: 'entrada', valor_previsto: '', valor_realizado: '0',
     status: 'previsto', origem: 'ajuste_manual', observacao: '',
@@ -821,7 +825,9 @@ function TabFluxo() {
               <label className="text-xs text-gray-400 mb-1 block">Status</label>
               <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.status} onChange={e => setCreateForm(f => ({...f, status: e.target.value}))}>
                 <option value="previsto">Previsto</option>
-                <option value="realizado">Realizado</option>
+                <option value="recebido">Recebido</option>
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
                 <option value="cancelado">Cancelado</option>
               </select>
             </div>
@@ -835,9 +841,13 @@ function TabFluxo() {
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Origem</label>
               <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.origem} onChange={e => setCreateForm(f => ({...f, origem: e.target.value}))}>
-                <option value="manual">Manual</option>
-                <option value="recorrente">Recorrente</option>
-                <option value="eventual">Eventual</option>
+                <option value="ajuste_manual">Ajuste Manual</option>
+                <option value="cliente_mensal">Cliente Mensal</option>
+                <option value="despesa_fixa">Despesa Fixa</option>
+                <option value="despesa_variavel">Despesa Variável</option>
+                <option value="transferencia">Transferência</option>
+                <option value="boleto">Boleto</option>
+                <option value="cartao">Cartão</option>
               </select>
             </div>
             <div className="col-span-2">
@@ -891,8 +901,36 @@ function TabConciliacao() {
   const [filtroConc, setFiltroConc] = useState('pendente')
   const [busca, setBusca] = useState('')
   const [marcando, setMarcando] = useState(null)
+  const [saldoReal, setSaldoReal] = useState('')
+  const [ajustandoSaldo, setAjustandoSaldo] = useState(false)
 
   const { data, loading, error, refetch } = useConciliacao({ mes, ano })
+
+  const saldoTeorico   = (data?.total_entradas_realizado ?? 0) - (data?.total_saidas_realizado ?? 0)
+  const diferencaSaldo = parseFloat(saldoReal || 0) - saldoTeorico
+
+  const handleGerarAjuste = async () => {
+    setAjustandoSaldo(true)
+    try {
+      await financeiroAPI.createLancamento({
+        descricao:        'Ajuste de Conciliação',
+        categoria:        'Ajuste de Conciliação',
+        tipo:             diferencaSaldo >= 0 ? 'entrada' : 'saida',
+        valor_previsto:   Math.abs(diferencaSaldo),
+        valor_realizado:  Math.abs(diferencaSaldo),
+        status:           'pago',
+        origem:           'ajuste_manual',
+        data_competencia: `${ano}-${String(mes).padStart(2, '0')}-01`,
+        observacao:       `Ajuste de conciliação. Saldo real informado: ${saldoReal}`,
+      })
+      refetch()
+      setSaldoReal('')
+    } catch (e) {
+      alert('Erro ao gerar ajuste: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setAjustandoSaldo(false)
+    }
+  }
 
   const lancamentos = useMemo(() => {
     let list = data?.lancamentos ?? []
@@ -1047,6 +1085,74 @@ function TabConciliacao() {
           </div>
         )}
       </Card>
+
+      {/* Conciliação de Saldo */}
+      <div className="rounded-xl p-4 space-y-3" style={{ background: '#272C30', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center gap-2">
+          <Banknote size={14} style={{ color: '#12F0C6' }} />
+          <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Conciliação de Saldo</p>
+          {!loading && <p className="text-[10px] text-gray-600 ml-auto">Base: lançamentos realizados no mês</p>}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Saldo calculado */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saldo Calculado</p>
+            <p className="text-base font-bold" style={{ color: loading ? '#4B5563' : saldoTeorico >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {loading ? '...' : formatCurrency(saldoTeorico)}
+            </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">entradas realizadas − saídas realizadas</p>
+          </div>
+          {/* Saldo real */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saldo Real da Conta</p>
+            <input
+              type="number"
+              placeholder="Ex: 12500.00"
+              value={saldoReal}
+              onChange={e => setSaldoReal(e.target.value)}
+              className="w-full bg-transparent text-base font-bold text-white outline-none border-b pb-0.5 transition-colors"
+              style={{ borderColor: saldoReal ? 'rgba(18,240,198,0.4)' : 'rgba(255,255,255,0.1)' }}
+            />
+            <p className="text-[10px] text-gray-600 mt-1">informe o saldo do seu banco</p>
+          </div>
+          {/* Diferença */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Diferença</p>
+            <p className="text-base font-bold" style={{
+              color: saldoReal === '' ? '#4B5563' : Math.abs(diferencaSaldo) < 0.01 ? '#12F0C6' : '#F59E0B'
+            }}>
+              {saldoReal === '' ? '—' : formatCurrency(diferencaSaldo)}
+            </p>
+            <p className="text-[10px] mt-0.5" style={{
+              color: saldoReal === '' ? '#374151' : Math.abs(diferencaSaldo) < 0.01 ? '#6EE7B7' : '#FCD34D'
+            }}>
+              {saldoReal === '' ? 'informe o saldo real' : Math.abs(diferencaSaldo) < 0.01 ? 'Saldos conferem ✓' : 'Divergência detectada'}
+            </p>
+          </div>
+        </div>
+        {saldoReal !== '' && Math.abs(diferencaSaldo) >= 0.01 && (
+          <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <p className="text-xs text-gray-500 flex-1">
+              Diferença de <span className="text-yellow-400 font-semibold">{formatCurrency(Math.abs(diferencaSaldo))}</span> detectada.
+              Será criado um lançamento de <strong>{diferencaSaldo >= 0 ? 'entrada' : 'saída'}</strong> como ajuste.
+            </p>
+            <button
+              onClick={handleGerarAjuste}
+              disabled={ajustandoSaldo}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap disabled:opacity-40"
+              style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.25)' }}>
+              <Plus size={11} />
+              {ajustandoSaldo ? 'Criando...' : 'Gerar ajuste de conciliação'}
+            </button>
+          </div>
+        )}
+        {saldoReal !== '' && Math.abs(diferencaSaldo) < 0.01 && (
+          <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <CheckCircle size={12} style={{ color: '#12F0C6' }} />
+            <span className="text-xs" style={{ color: '#12F0C6' }}>Saldo conferido! Nenhum ajuste necessário.</span>
+          </div>
+        )}
+      </div>
 
       {/* Orientação futura */}
       <div className="rounded-xl border border-dashed p-4 flex gap-3 items-start"
