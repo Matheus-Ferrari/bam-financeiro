@@ -779,11 +779,25 @@ function TabFluxo() {
 
       {/* â”€â”€ Resumo lateral â”€â”€ */}
       {!loading && data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <Resumo label="Total Recebido"        value={data.total_entradas_realizado} color="#12F0C6" />
-          <Resumo label="A Pagar no Período"    value={data.total_saidas_previsto - data.total_saidas_realizado}    color="#F59E0B" />
           <Resumo label="Total Pago"            value={data.total_saidas_realizado}    color="#EF4444" />
+          {/* Resultado realizado — pode ser negativo, então não usa Resumo que clampa */}
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Realizado</p>
+            <p className="text-base font-bold" style={{ color: (data.total_entradas_realizado - data.total_saidas_realizado) >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {formatCompact(data.total_entradas_realizado - data.total_saidas_realizado)}
+            </p>
+          </div>
+          <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
+          <Resumo label="A Pagar no Período"    value={data.total_saidas_previsto - data.total_saidas_realizado}    color="#F59E0B" />
+          {/* Resultado previsto — pode ser negativo */}
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Previsto</p>
+            <p className="text-base font-bold" style={{ color: (data.total_entradas_previsto - data.total_saidas_previsto) >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {formatCompact(data.total_entradas_previsto - data.total_saidas_previsto)}
+            </p>
+          </div>
         </div>
       )}
 

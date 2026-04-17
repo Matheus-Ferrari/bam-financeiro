@@ -59,20 +59,23 @@ export default function Dashboard() {
   const atrasados    = pendentesRaw.filter(c => c.origem === 'atraso' || c.status_pagamento === 'atrasado' || c.status_pagamento === 'vencido')
   const pendentesMes = pendentesRaw.filter(c => c.origem !== 'atraso' && c.status_pagamento !== 'atrasado' && c.status_pagamento !== 'vencido')
 
-  // ── Métricas financeiras: fechamento > operacao > kpis ───────────
+  // ── Métricas financeiras — fonte única: arrays de clientes ─────────
   const fRes              = fd?.resumo ?? {}
-  const receitaConfirmada = typeof fRes.receita_confirmada === 'number'
-    ? fRes.receita_confirmada
-    : pagosArr.reduce((s, c) => s + parseFloat(c.valor_recebido || c.valor_mensal || c.valor || 0), 0)
-  const receitaPrevista   = typeof fRes.total_receita === 'number'
-    ? fRes.total_receita
-    : (op?.total_previsto_receitas_mes ?? receitaConfirmada)
-  const aReceber          = typeof fRes.receita_pendente === 'number'
-    ? fRes.receita_pendente
-    : pendentesMes.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  // Receita confirmada: calculada da lista de pagos (mesma fórmula do Fechamento do Mês)
+  const receitaConfirmada = pagosArr.reduce(
+    (s, c) => s + parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0), 0
+  )
+  // A Receber: pendentes do mês + em atraso (todos os não recebidos)
+  const aReceber          = [...pendentesMes, ...atrasados].reduce(
+    (s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0
+  )
+  // Receita prevista = recebida + a receber (total esperado no mês)
+  const receitaPrevista   = receitaConfirmada + aReceber
+  // Despesas: via resumo do fechamento (inclui novos gastos / reduções)
   const totalDespesas     = typeof fRes.total_despesa === 'number'
     ? fRes.total_despesa
     : (op?.total_previsto_despesas_mes ?? 0)
+  // Lucro projetado: total receita − total despesas
   const lucroProjetado    = receitaPrevista - totalDespesas
   const caixaAtual        = cx?.caixa_atual ?? op?.caixa_atual ?? 0
 
@@ -258,7 +261,7 @@ export default function Dashboard() {
         {[
           { label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,                                          icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
           { label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',                                      icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
-          { label: 'A Receber',        value: aReceber,          color: '#F59E0B',                                      icon: Clock,        sub: `${pendentesMes.length} pendentes este mês` },
+          { label: 'A Receber',        value: aReceber,          color: '#F59E0B',                                      icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto${atrasados.length > 0 ? ` (${atrasados.length} em atraso)` : ''}` },
           { label: 'Despesas',         value: totalDespesas,     color: '#EF4444',                                      icon: DollarSign,   sub: 'previsto + confirmado' },
           { label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444',        icon: Activity,     sub: 'receita prevista − despesas' },
         ].map(({ label, value, color, icon: Icon, sub }) => (
@@ -280,7 +283,7 @@ export default function Dashboard() {
         {[
           { label: 'Caixa Atual',      value: formatCurrency(caixaAtual),                                  color: GREEN,      sub: null },
           { label: 'Clientes Pagos',   value: `${pctPagos}%`,                                              color: GREEN,      sub: `${pagosArr.length} de ${totalClientes}` },
-          { label: 'Total Pendente',   value: formatCurrency(totalPendente + totalAtrasado),               color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
+          { label: 'Total Pendente',   value: formatCurrency(aReceber),                                    color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
           { label: 'Saúde Financeira', value: saudeNivel,                                                   color: saudeColor, sub: lucroProjetado >= 0 ? 'lucro positivo' : 'despesas > receita' },
         ].map(({ label, value, color, sub }) => (
           <div key={label} className="rounded-xl px-4 py-3"

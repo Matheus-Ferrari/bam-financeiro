@@ -15,13 +15,11 @@ function round2(n: number): number {
 function buildResumo(fech: Record<string, unknown>, competencia: string, clientes: Record<string, unknown>[], comissoes: Record<string, unknown>[]): Record<string, unknown> {
   const ativo = clientes.filter((c) => c.status === "ativo");
 
-  const pagosMes = ativo.filter((c) => String(c.data_pagamento || "").startsWith(competencia) && toFloat(c.valor_recebido) > 0);
-  const pagosStatus = ativo.filter((c) => c.status_pagamento === "pago" && toFloat(c.valor_recebido) > 0 && !String(c.data_pagamento || "").startsWith(competencia));
-  const pagosIds = new Set([...pagosMes, ...pagosStatus].map((c) => c.id));
-  const pagos = [...pagosMes, ...pagosStatus];
-  const pendentes = ativo.filter((c) => !pagosIds.has(c.id));
+  // Fonte única: status_pagamento === "pago" (igual ao Fechamento do Mês no frontend)
+  const pagos    = ativo.filter((c) => c.status_pagamento === "pago");
+  const pendentes = ativo.filter((c) => c.status_pagamento !== "pago");
 
-  const receitaConfirmada = pagos.reduce((s, c) => s + toFloat(c.valor_recebido || c.valor_previsto), 0);
+  const receitaConfirmada = pagos.reduce((s, c) => s + toFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto), 0);
   const receitaPendente = pendentes.reduce((s, c) => s + toFloat(c.valor_previsto || c.valor_mensal), 0);
 
   const despPrev = ((fech.despesas_previstas as Record<string, unknown>[]) || []);
@@ -80,9 +78,9 @@ router.get("/:competencia", async (req, res) => {
     const resumo = buildResumo(fech as Record<string, unknown>, competencia, clientes, todasComissoes);
 
     const ativo = clientes.filter((c) => c.status === "ativo");
-    const pagosMes = ativo.filter((c) => String(c.data_pagamento || "").startsWith(competencia) && toFloat(c.valor_recebido) > 0);
-    const pagosStatus = ativo.filter((c) => c.status_pagamento === "pago" && toFloat(c.valor_recebido) > 0 && !String(c.data_pagamento || "").startsWith(competencia));
-    const pagosIds = new Set([...pagosMes, ...pagosStatus].map((c) => c.id));
+    // Mesma lógica do buildResumo: fonte única via status_pagamento
+    const pagosArr = ativo.filter((c) => c.status_pagamento === "pago");
+    const pagosIds = new Set(pagosArr.map((c) => c.id));
     const comissoesMes = todasComissoes.filter((c) => String(c.competencia || "").startsWith(competencia));
 
     // clientes_extras ficam SEPARADOS — não misturar com clientes_pendentes para evitar duplicata no frontend
@@ -90,7 +88,7 @@ router.get("/:competencia", async (req, res) => {
 
     res.json({
       fechamento: fech, resumo,
-      clientes_pagos: [...pagosMes, ...pagosStatus],
+      clientes_pagos: pagosArr,
       clientes_pendentes: ativo.filter((c) => !pagosIds.has(c.id)),
       clientes_extras: clientesExtras,
       comissoes_mes: comissoesMes,
