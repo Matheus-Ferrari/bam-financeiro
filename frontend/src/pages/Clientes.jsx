@@ -159,10 +159,20 @@ export default function Clientes() {
     const ativosArr = clientes.filter(c => c.status === 'ativo')
     const hoje = new Date().getDate()
 
-    const totalPrevisto = ativosArr.reduce((s, c) =>
+    // "Previsto" = receita pendente: apenas ativos ainda não pagos
+    // (mesma base do Fechamento do Mês — clientes pendentes, incluindo extras não pagos)
+    const pendenteArr = ativosArr.filter(c => c.status_pagamento !== 'pago')
+    // Extras manuais do fechamento ainda não pagos
+    const extrasNaoPagos = (fechData?.clientes_extras ?? []).filter(c => c.status_pagamento !== 'pago')
+    const totalPrevisto = [...pendenteArr, ...extrasNaoPagos].reduce((s, c) =>
       s + parseFloat(c.valor_previsto || c.valor_mensal || 0), 0)
-    const totalRecebido = clientes.reduce((s, c) =>
-      s + parseFloat(c.valor_recebido || 0), 0)
+
+    // "Recebido" = soma de pagos normais + extras pagos
+    const extrasPagos = (fechData?.clientes_extras ?? []).filter(c => c.status_pagamento === 'pago')
+    const totalRecebido = [
+      ...clientes.filter(c => c.status_pagamento === 'pago'),
+      ...extrasPagos,
+    ].reduce((s, c) => s + parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || 0), 0)
 
     const pagosMes = clientes.filter(c =>
       c.status === 'ativo' && c.status_pagamento === 'pago'
@@ -185,9 +195,7 @@ export default function Clientes() {
       pagos_mes:              pagosMes,
       em_atraso:              emAtraso,
     }
-  }, [clientes, data])
-
-  // ── Filtros ────────────────────────────────────────────────────
+  }, [clientes, data, fechData])
   const filtered = useMemo(() => clientes.filter(c => {
     const matchStatus = statusFiltro === 'todos' || c.status === statusFiltro
     const diaHj = new Date().getDate()
@@ -390,7 +398,7 @@ export default function Clientes() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                    {['Nome','Status','Pagamento','Dia Pagt.','Previsto','Recebido','Cobrança','Contato','Ações'].map(h => (
+                    {['Nome','Status','Pagamento','Dia Pagt.','Previsto','Recebido','Pendente','Cobrança','Contato','Ações'].map(h => (
                       <th key={h} className="text-left py-2 px-3 text-gray-500 font-medium">{h}</th>
                     ))}
                   </tr>
@@ -426,6 +434,15 @@ export default function Clientes() {
                         <td className="py-3 px-3 font-semibold text-white">
                           {formatCompact(c.valor_recebido ?? 0)}
                         </td>
+                        <td className="py-3 px-3 font-semibold">
+                          {c.status_pagamento === 'pago' ? (
+                            <span className="text-gray-600 text-[10px]">—</span>
+                          ) : (
+                            <span style={{ color: '#F59E0B' }}>
+                              {formatCompact(Math.max(parseFloat(c.valor_previsto ?? c.valor_mensal ?? 0) - parseFloat(c.valor_recebido ?? 0), parseFloat(c.valor_previsto ?? c.valor_mensal ?? 0)))}
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 px-3">
                           {c.cobranca_status && c.cobranca_status !== 'sem_cobrar' ? (
                             <Badge variant={COBRANCA_BADGE[c.cobranca_status] ?? 'neutral'} dot>
@@ -460,12 +477,16 @@ export default function Clientes() {
                             </button>
                             {c.status_pagamento !== 'pago' ? (
                               <button onClick={() => handlePagamento(c, 'pago')} disabled={updatingPgto === c.id}
-                                className="px-2 py-1 rounded-md text-[10px] font-semibold text-black"
-                                style={{ background: GREEN }}>Pago</button>
+                                className="px-2 py-1 rounded-md text-[10px] font-semibold whitespace-nowrap"
+                                style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+                                Marcar pago
+                              </button>
                             ) : (
                               <button onClick={() => handlePagamento(c, 'pendente')} disabled={updatingPgto === c.id}
-                                className="px-2 py-1 rounded-md text-[10px] font-semibold text-gray-300 border border-white/15">
-                                Pendente
+                                title="Clique para reverter para pendente"
+                                className="flex items-center gap-0.5 px-2 py-1 rounded-md text-[10px] font-semibold border border-transparent hover:border-white/20 transition"
+                                style={{ color: GREEN }}>
+                                <CheckCircle size={10} /> Pago
                               </button>
                             )}
                             {c.status_pagamento !== 'pago' && (
@@ -558,8 +579,10 @@ export default function Clientes() {
                                 </button>
                               )}
                               <button onClick={() => handlePagamento(c, 'pago')} disabled={updatingPgto === c.id}
-                                className="px-2 py-1 rounded-md text-[10px] font-semibold text-black"
-                                style={{ background: GREEN }}>Pago</button>
+                                className="px-2 py-1 rounded-md text-[10px] font-semibold whitespace-nowrap"
+                                style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+                                Marcar pago
+                              </button>
                             </div>
                           </td>
                         </tr>

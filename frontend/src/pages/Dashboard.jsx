@@ -51,10 +51,14 @@ export default function Dashboard() {
   }
 
   // ── Listas de clientes: fechamento > operacao (fallback) ─────────
-  const pagosArr     = fd?.clientes_pagos ?? op?.clientes_pagos ?? []
+  const extrasArr    = fd?.clientes_extras ?? []
+  const pagosArr     = [
+    ...(fd?.clientes_pagos ?? op?.clientes_pagos ?? []),
+    ...extrasArr.filter(c => c.status_pagamento === 'pago'),
+  ]
   const pendentesRaw = [
     ...(fd?.clientes_pendentes ?? op?.clientes_pendentes ?? []),
-    ...(fd?.clientes_extras ?? []),
+    ...extrasArr.filter(c => c.status_pagamento !== 'pago'),
   ]
   const atrasados    = pendentesRaw.filter(c => c.origem === 'atraso' || c.status_pagamento === 'atrasado' || c.status_pagamento === 'vencido')
   const pendentesMes = pendentesRaw.filter(c => c.origem !== 'atraso' && c.status_pagamento !== 'atrasado' && c.status_pagamento !== 'vencido')
