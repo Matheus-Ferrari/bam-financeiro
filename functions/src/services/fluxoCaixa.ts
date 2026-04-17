@@ -479,10 +479,12 @@ export class FluxoCaixaService {
   }
 
   async deleteManual(id: string): Promise<Record<string, unknown>> {
+    // buildManuais prefixes ids with "mov_"; strip it to get the real Firestore doc id
+    const rawId = id.startsWith("mov_") ? id.slice(4) : id;
     const movs = await movimentacoesStorage.all();
-    const mov = movs.find((m) => String(m.id) === id);
+    const mov = movs.find((m) => String(m.id) === rawId);
     if (!mov) throw new Error("Lançamento não encontrado ou não é manual");
-    await movimentacoesStorage.delete(id);
+    await movimentacoesStorage.delete(rawId);
     return { ok: true, id };
   }
 }
