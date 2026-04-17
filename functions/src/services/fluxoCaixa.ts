@@ -232,34 +232,35 @@ export class FluxoCaixaService {
     return result;
   }
 
-  private async buildManuais(cm: Record<string, Record<string, unknown>>): Promise<Record<string, unknown>[]> {
+  private async buildManuais(cm: Record<string, Record<string, unknown>>, sm: Record<string, Record<string, unknown>>): Promise<Record<string, unknown>[]> {
     const movs = await movimentacoesStorage.all();
     return movs
       .filter((m) => m.tipo !== "ajuste_caixa")
       .map((m) => {
         const lid = `mov_${m.id || ""}`;
         const conc = cm[lid] || {};
+        const ov = sm[lid] || {};
         const tipoRaw = String(m.tipo || "").toLowerCase();
         let tipo: string, statusDerived: string;
         if (["entrada", "recebimento"].includes(tipoRaw)) { tipo = "entrada"; statusDerived = "recebido"; }
         else if (["saida", "despesa", "pagamento"].includes(tipoRaw)) { tipo = "saida"; statusDerived = "pago"; }
         else { tipo = tipoRaw; statusDerived = "previsto"; }
-        // BUG1 FIX: createManual stores the date as data_competencia; m.data is for legacy movimentacoes
-        const dataStr = String(m.data_competencia || m.data || "").slice(0, 10);
-        // BUG4 FIX: use stored status (set by createManual) instead of always overriding from tipo
-        const status = m.status ? String(m.status) : statusDerived;
-        // BUG2 FIX: createManual stores valor_previsto / valor_realizado separately; m.valor is for legacy
-        const valorPrev = toFloat(m.valor_previsto ?? m.valor);
-        const valorReal = toFloat(m.valor_realizado ?? (status === "recebido" || status === "pago" ? valorPrev : 0));
+        const dataStr = String(ov.data_competencia || m.data_competencia || m.data || "").slice(0, 10);
+        // status: override de statusOverridesStorage > documento movimentacoes > derivado do tipo
+        const status = ov.status ? String(ov.status) : (m.status ? String(m.status) : statusDerived);
+        const valorPrev = toFloat(ov.valor_previsto ?? m.valor_previsto ?? m.valor);
+        const valorReal = ov.valor_realizado != null
+          ? toFloat(ov.valor_realizado)
+          : toFloat(m.valor_realizado ?? (status === "recebido" || status === "pago" ? valorPrev : 0));
         return {
           id: lid, data_competencia: dataStr, data_vencimento: dataStr,
           data_pagamento: (status === "recebido" || status === "pago") ? dataStr : null,
-          // BUG3 FIX: createManual stores field as `cliente`; m.cliente_relacionado is legacy
-          descricao: m.descricao || "Lançamento manual", cliente: String(m.cliente || m.cliente_relacionado || ""),
-          categoria: m.categoria || "manual", subcategoria: "", tipo,
+          descricao: String(ov.descricao || m.descricao || "Lançamento manual"),
+          cliente: String(ov.cliente || m.cliente || m.cliente_relacionado || ""),
+          categoria: String(ov.categoria || m.categoria || "manual"), subcategoria: "",
+          tipo: String(ov.tipo || tipo),
           valor_previsto: round2(valorPrev), valor_realizado: round2(valorReal),
-          // BUG5 FIX: use stored origem instead of hardcoding "ajuste_manual"
-          status, recorrente: false, origem: String(m.origem || "ajuste_manual"),
+          status, recorrente: false, origem: String(ov.origem || m.origem || "ajuste_manual"),
           forma_pagamento: "", conta_financeira: "conta_principal",
           conciliado: conc.status_conciliacao === "conciliado",
           status_conciliacao: conc.status_conciliacao || "pendente",
@@ -360,7 +361,7 @@ export class FluxoCaixaService {
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
     const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
-    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
+    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm, sm)];
 
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
@@ -400,7 +401,7 @@ export class FluxoCaixaService {
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
     const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
-    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm)];
+    const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm, sm)];
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
     let todos = this.applyFieldOverrides([...deduped, ...cliLanc], sm);
