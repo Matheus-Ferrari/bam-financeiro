@@ -240,18 +240,26 @@ export class FluxoCaixaService {
         const lid = `mov_${m.id || ""}`;
         const conc = cm[lid] || {};
         const tipoRaw = String(m.tipo || "").toLowerCase();
-        let tipo: string, status: string;
-        if (["entrada", "recebimento"].includes(tipoRaw)) { tipo = "entrada"; status = "recebido"; }
-        else if (["saida", "despesa", "pagamento"].includes(tipoRaw)) { tipo = "saida"; status = "pago"; }
-        else { tipo = tipoRaw; status = "previsto"; }
-        const dataStr = String(m.data || "").slice(0, 10);
-        const valor = toFloat(m.valor);
+        let tipo: string, statusDerived: string;
+        if (["entrada", "recebimento"].includes(tipoRaw)) { tipo = "entrada"; statusDerived = "recebido"; }
+        else if (["saida", "despesa", "pagamento"].includes(tipoRaw)) { tipo = "saida"; statusDerived = "pago"; }
+        else { tipo = tipoRaw; statusDerived = "previsto"; }
+        // BUG1 FIX: createManual stores the date as data_competencia; m.data is for legacy movimentacoes
+        const dataStr = String(m.data_competencia || m.data || "").slice(0, 10);
+        // BUG4 FIX: use stored status (set by createManual) instead of always overriding from tipo
+        const status = m.status ? String(m.status) : statusDerived;
+        // BUG2 FIX: createManual stores valor_previsto / valor_realizado separately; m.valor is for legacy
+        const valorPrev = toFloat(m.valor_previsto ?? m.valor);
+        const valorReal = toFloat(m.valor_realizado ?? (status === "recebido" || status === "pago" ? valorPrev : 0));
         return {
-          id: lid, data_competencia: dataStr, data_vencimento: dataStr, data_pagamento: dataStr,
-          descricao: m.descricao || "Lançamento manual", cliente: m.cliente_relacionado || "",
+          id: lid, data_competencia: dataStr, data_vencimento: dataStr,
+          data_pagamento: (status === "recebido" || status === "pago") ? dataStr : null,
+          // BUG3 FIX: createManual stores field as `cliente`; m.cliente_relacionado is legacy
+          descricao: m.descricao || "Lançamento manual", cliente: String(m.cliente || m.cliente_relacionado || ""),
           categoria: m.categoria || "manual", subcategoria: "", tipo,
-          valor_previsto: round2(valor), valor_realizado: round2(valor),
-          status, recorrente: false, origem: "ajuste_manual",
+          valor_previsto: round2(valorPrev), valor_realizado: round2(valorReal),
+          // BUG5 FIX: use stored origem instead of hardcoding "ajuste_manual"
+          status, recorrente: false, origem: String(m.origem || "ajuste_manual"),
           forma_pagamento: "", conta_financeira: "conta_principal",
           conciliado: conc.status_conciliacao === "conciliado",
           status_conciliacao: conc.status_conciliacao || "pendente",

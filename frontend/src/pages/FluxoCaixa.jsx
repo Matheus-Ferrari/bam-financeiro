@@ -325,18 +325,24 @@ function TabFluxo() {
   const handleCreate = async () => {
     if (!createForm.descricao.trim()) { setCreateErr('Descrição é obrigatória.'); return }
     if (!createForm.valor_previsto)   { setCreateErr('Valor é obrigatório.'); return }
+    const payload = {
+      ...createForm,
+      valor_previsto:  parseFloat(createForm.valor_previsto)  || 0,
+      valor_realizado: parseFloat(createForm.valor_realizado) || 0,
+      status_conciliacao: 'pendente',
+    }
+    console.log('[FluxoCaixa] Criando lançamento:', payload)
     setCreateSaving(true); setCreateErr('')
     try {
-      await financeiroAPI.createLancamento({
-        ...createForm,
-        valor_previsto:  parseFloat(createForm.valor_previsto)  || 0,
-        valor_realizado: parseFloat(createForm.valor_realizado) || 0,
-      })
+      const res = await financeiroAPI.createLancamento(payload)
+      console.log('[FluxoCaixa] Lançamento criado:', res?.data)
       setCreateOpen(false)
-      setCreateForm(FORM_EMPTY)
+      setCreateForm({ ...FORM_EMPTY, data_competencia: formDataAtual() })
       refetch()
     } catch (e) {
-      setCreateErr(e?.response?.data?.detail || 'Erro ao criar lançamento.')
+      const msg = e?.response?.data?.detail || e?.message || 'Erro desconhecido ao criar lançamento.'
+      console.error('[FluxoCaixa] Erro ao criar lançamento:', e?.response?.data ?? e)
+      setCreateErr(msg)
     } finally { setCreateSaving(false) }
   }
 
