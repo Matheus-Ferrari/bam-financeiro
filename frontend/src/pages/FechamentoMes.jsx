@@ -1118,7 +1118,11 @@ export default function FechamentoMes() {
                            style={{ background: 'rgba(239,68,68,0.03)', border: '1px solid rgba(239,68,68,0.12)' }}>
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white font-medium">{c.nome}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-sm text-white font-medium">{c.nome}</p>
+                              {c.cobranca_status === 'cobrado'        && <Badge variant="info"    dot>Cobrado</Badge>}
+                              {c.cobranca_status === 'prometeu_pagar' && <Badge variant="success" dot>Prometeu</Badge>}
+                            </div>
                             {temHist && (
                               <p className="text-[11px] text-gray-600 mt-0.5 italic">
                                 Último: {formatCurrency(ultRec)} em {new Date(c.data_pagamento + 'T12:00').toLocaleDateString('pt-BR')}

@@ -1,6 +1,6 @@
 ﻿import { useState, useMemo } from 'react'
-import { RefreshCw, CalendarCheck, TrendingUp, CheckCircle, AlertTriangle, Clock, ArrowRight, DollarSign, Activity, Zap, Users, MessageSquare } from 'lucide-react'
-import { useKpis, useOperacaoMes, useCaixa, useFechamento } from '../hooks/useFinanceiro'
+import { RefreshCw, CalendarCheck, TrendingUp, CheckCircle, AlertTriangle, Clock, ArrowRight, DollarSign, Activity, Zap, Users, MessageSquare, TrendingDown } from 'lucide-react'
+import { useKpis, useOperacaoMes, useCaixa, useFechamento, useDespesasLocais, useComissoes } from '../hooks/useFinanceiro'
 import QuickUpdatePanel from '../components/dashboard/QuickUpdatePanel'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -20,22 +20,25 @@ export default function Dashboard() {
   const dateLabel   = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 
   // ── Hooks de dados ───────────────────────────────────────────────
-  const kpis     = useKpis()
-  const operacao = useOperacaoMes()
-  const caixa    = useCaixa()
-  const fech     = useFechamento(competencia)
-  const navigate = useNavigate()
+  const kpis       = useKpis()
+  const operacao   = useOperacaoMes()
+  const caixa      = useCaixa()
+  const fech       = useFechamento(competencia)
+  const despLocais = useDespesasLocais()
+  const comissoes  = useComissoes()
+  const navigate   = useNavigate()
 
   const [markingId, setMarkingId]             = useState(null)
   const [expandAtrasados, setExpandAtrasados] = useState(true)
   const [expandAlertCard, setExpandAlertCard] = useState(null) // 'hoje'|'proximos'|'atrasados'|'maiores'
-  const [expandResumoSemanal, setExpandResumoSemanal] = useState(true)
+  const [expandFinanceiro, setExpandFinanceiro]   = useState(true)
+  const [tabFinanceiro, setTabFinanceiro]         = useState('mensal')
 
   const op = operacao.data
   const cx = caixa.data
   const fd = fech.data
 
-  const refetchAll = () => { kpis.refetch(); operacao.refetch(); caixa.refetch(); fech.refetch() }
+  const refetchAll = () => { kpis.refetch(); operacao.refetch(); caixa.refetch(); fech.refetch(); despLocais.refetch(); comissoes.refetch() }
 
   const marcarPago = async (cliente) => {
     const valor = parseFloat(cliente.valor_mensal || cliente.valor_previsto || cliente.valor || 0)
@@ -155,6 +158,33 @@ export default function Dashboard() {
   const totalPrometeram    = prometeram.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
   const totalSemCobrar     = semCobrarArr.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
 
+  // ── Saídas (despesas pagas): usa atualizado_em como data de pagamento ────
+  const todasDespesas = useMemo(() => {
+    const locais     = (despLocais.data?.despesas ?? []).filter(d => d.status === 'pago')
+    const coms       = (comissoes.data?.comissoes ?? []).filter(c => c.status === 'pago')
+    const fechDesp   = (fd?.fechamento?.despesas_previstas ?? [])
+      .filter(d => d.status === 'pago')
+      .map(d => ({ ...d, nome: d.descricao || d.nome || 'Despesa', categoria: d.categoria || 'Fechamento' }))
+    return [...locais, ...coms, ...fechDesp]
+  }, [despLocais.data, comissoes.data, fd])
+
+  const saidasEssaSemana = useMemo(() =>
+    todasDespesas.filter(d => {
+      const dt = new Date(d.atualizado_em || d.data_pagamento || 0)
+      return !isNaN(dt.getTime()) && dt >= inicioSemana
+    })
+  , [todasDespesas, inicioSemana])
+
+  const saidasSemanaPasada = useMemo(() =>
+    todasDespesas.filter(d => {
+      const dt = new Date(d.atualizado_em || d.data_pagamento || 0)
+      return !isNaN(dt.getTime()) && dt >= inicioSemanaPasada && dt < inicioSemana
+    })
+  , [todasDespesas, inicioSemana, inicioSemanaPasada])
+
+  const totalSaidasEssaSemana   = saidasEssaSemana.reduce((s, d) => s + parseFloat(d.valor || 0), 0)
+  const totalSaidasSemanaPasada = saidasSemanaPasada.reduce((s, d) => s + parseFloat(d.valor || 0), 0)
+
   // ── Frases dinâmicas "Visão de Hoje" ────────────────────────────
   const frases = useMemo(() => {
     const msgs = []
@@ -211,49 +241,82 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Atividade da Semana ───────────────────────────────────── */}
+      {/* ── Receitas & Despesas ──────────────────────────────────── */}
       <div className="rounded-xl overflow-hidden" style={{ background: '#1A1E21', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <button
-          onClick={() => setExpandResumoSemanal(v => !v)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition">
+        {/* Header com abas + fechar */}
+        <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <Activity size={13} style={{ color: GREEN }} />
-            <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Atividade da Semana</p>
+            <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Receitas & Despesas</p>
           </div>
-          <div className="flex items-center gap-3">
-            {(pagosEssaSemana.length > 0 || cobradosPendentes.length > 0) && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full"
-                style={{ background: `${GREEN}18`, color: GREEN }}>
-                {pagosEssaSemana.length > 0 ? `${pagosEssaSemana.length} pagtos` : `${cobradosPendentes.length} cobrados`}
-              </span>
-            )}
-            <span className="text-[10px] text-gray-600">{expandResumoSemanal ? 'Recolher' : 'Expandir'}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg overflow-hidden" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <button
+                onClick={() => { setTabFinanceiro('mensal'); setExpandFinanceiro(true) }}
+                className="text-[10px] px-3 py-1.5 font-semibold transition"
+                style={tabFinanceiro === 'mensal' && expandFinanceiro ? { background: GREEN, color: '#000' } : { color: '#6B7280' }}>
+                Mensal
+              </button>
+              <button
+                onClick={() => { setTabFinanceiro('semanal'); setExpandFinanceiro(true) }}
+                className="text-[10px] px-3 py-1.5 font-semibold transition"
+                style={tabFinanceiro === 'semanal' && expandFinanceiro ? { background: GREEN, color: '#000' } : { color: '#6B7280' }}>
+                Semanal
+              </button>
+            </div>
+            <button
+              onClick={() => setExpandFinanceiro(v => !v)}
+              className="text-[10px] text-gray-600 hover:text-gray-400 transition px-2 py-1 rounded">
+              {expandFinanceiro ? 'Fechar ↑' : 'Abrir ↓'}
+            </button>
           </div>
-        </button>
-        {expandResumoSemanal && (
+        </div>
+        {expandFinanceiro && tabFinanceiro === 'semanal' && (
           <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            {/* Comparativo de pagamentos: esta semana vs. semana passada */}
-            <div className="grid grid-cols-2 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            {/* Comparativo 2×2: entradas + saídas, esta semana vs. semana passada */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
               <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Esta semana</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↑ Receitas Semana Atual</p>
                 <p className="text-base font-bold mt-1" style={{ color: pagosEssaSemana.length > 0 ? GREEN : '#4B5563' }}>
                   {pagosEssaSemana.length > 0 ? formatCurrency(totalEssaSemana) : '—'}
                 </p>
                 <p className="text-[10px] text-gray-600 mt-0.5">
                   {pagosEssaSemana.length > 0
                     ? `${pagosEssaSemana.length} ${pagosEssaSemana.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
-                    : 'Nenhum pagamento registrado'}
+                    : 'Nenhum pagamento'}
                 </p>
               </div>
               <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Semana passada</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↓ Pagamentos Semana Atual</p>
+                <p className="text-base font-bold mt-1" style={{ color: saidasEssaSemana.length > 0 ? '#EF4444' : '#4B5563' }}>
+                  {saidasEssaSemana.length > 0 ? formatCurrency(totalSaidasEssaSemana) : '—'}
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  {saidasEssaSemana.length > 0
+                    ? `${saidasEssaSemana.length} ${saidasEssaSemana.length === 1 ? 'despesa paga' : 'despesas pagas'}`
+                    : 'Nenhuma saída'}
+                </p>
+              </div>
+              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↑ Receitas Semana Passada</p>
                 <p className="text-base font-bold mt-1 text-gray-300">
                   {pagosSemanaPasada.length > 0 ? formatCurrency(totalSemanaPasada) : '—'}
                 </p>
                 <p className="text-[10px] text-gray-600 mt-0.5">
                   {pagosSemanaPasada.length > 0
                     ? `${pagosSemanaPasada.length} ${pagosSemanaPasada.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
-                    : 'Nenhum pagamento registrado'}
+                    : 'Nenhum pagamento'}
+                </p>
+              </div>
+              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↓ Pagamentos Semana Passada</p>
+                <p className="text-base font-bold mt-1 text-gray-500">
+                  {saidasSemanaPasada.length > 0 ? formatCurrency(totalSaidasSemanaPasada) : '—'}
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  {saidasSemanaPasada.length > 0
+                    ? `${saidasSemanaPasada.length} ${saidasSemanaPasada.length === 1 ? 'despesa paga' : 'despesas pagas'}`
+                    : 'Nenhuma saída'}
                 </p>
               </div>
             </div>
@@ -307,7 +370,7 @@ export default function Dashboard() {
               {/* Lista de pagamentos desta semana */}
               {pagosEssaSemana.length > 0 && (
                 <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos desta semana</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Receitas desta semana — clientes que pagaram</p>
                   <div className="space-y-1">
                     {pagosEssaSemana.slice(0, 6).map(c => {
                       const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
@@ -328,9 +391,101 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {pagosEssaSemana.length === 0 && cobradosPendentes.length === 0 && prometeram.length === 0 && (
+              {/* Saídas desta semana (despesas + comissões pagas) */}
+              {saidasEssaSemana.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos desta semana — despesas pagas</p>
+                  <div className="space-y-1">
+                    {saidasEssaSemana.slice(0, 8).map((d, i) => (
+                      <div key={d.id || i} className="flex items-center justify-between py-0.5">
+                        <div className="flex items-center gap-2">
+                          <TrendingDown size={11} style={{ color: '#EF4444', flexShrink: 0 }} />
+                          <p className="text-xs text-gray-300 truncate max-w-[160px]">{d.nome || d.descricao || 'Despesa'}</p>
+                          {d.categoria && <span className="text-[10px] text-gray-600 hidden sm:inline">· {d.categoria}</span>}
+                        </div>
+                        <p className="text-xs font-semibold ml-2 whitespace-nowrap text-red-400">{formatCurrency(parseFloat(d.valor || 0))}</p>
+                      </div>
+                    ))}
+                    {saidasEssaSemana.length > 8 && (
+                      <p className="text-[10px] text-gray-600 pt-0.5">+ {saidasEssaSemana.length - 8} mais</p>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <span className="text-[10px] text-gray-600">Total saídas semana</span>
+                    <span className="text-xs font-bold text-red-400">{formatCurrency(totalSaidasEssaSemana)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Saídas semana passada */}
+              {saidasSemanaPasada.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos semana passada — despesas pagas</p>
+                  <div className="space-y-1">
+                    {saidasSemanaPasada.slice(0, 5).map((d, i) => (
+                      <div key={d.id || i} className="flex items-center justify-between py-0.5">
+                        <div className="flex items-center gap-2">
+                          <TrendingDown size={11} style={{ color: '#6B7280', flexShrink: 0 }} />
+                          <p className="text-xs text-gray-500 truncate max-w-[160px]">{d.nome || d.descricao || 'Despesa'}</p>
+                        </div>
+                        <p className="text-xs font-semibold ml-2 whitespace-nowrap text-gray-500">{formatCurrency(parseFloat(d.valor || 0))}</p>
+                      </div>
+                    ))}
+                    {saidasSemanaPasada.length > 5 && (
+                      <p className="text-[10px] text-gray-600 pt-0.5">+ {saidasSemanaPasada.length - 5} mais</p>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <span className="text-[10px] text-gray-600">Total saídas semana passada</span>
+                    <span className="text-xs font-bold text-gray-500">{formatCurrency(totalSaidasSemanaPasada)}</span>
+                  </div>
+                </div>
+              )}
+
+              {pagosEssaSemana.length === 0 && cobradosPendentes.length === 0 && prometeram.length === 0 && saidasEssaSemana.length === 0 && (
                 <p className="text-xs text-gray-600 text-center py-1">Nenhuma atividade registrada nesta semana.</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Aba Mensal */}
+        {expandFinanceiro && tabFinanceiro === 'mensal' && (
+          <div className="border-t p-4 space-y-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {[
+                { label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,                                          icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
+                { label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',                                      icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
+                { label: 'A Receber',        value: aReceber,          color: '#F59E0B',                                      icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto${atrasados.length > 0 ? ` (${atrasados.length} em atraso)` : ''}` },
+                { label: 'Despesas',         value: totalDespesas,     color: '#EF4444',                                      icon: DollarSign,   sub: 'previsto + confirmado' },
+                { label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444',        icon: Activity,     sub: 'receita prevista − despesas' },
+              ].map(({ label, value, color, icon: Icon, sub }) => (
+                <div key={label} className="rounded-xl p-4" style={{ background: '#272C30', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wider leading-tight">{label}</p>
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
+                      <Icon size={13} style={{ color }} />
+                    </div>
+                  </div>
+                  <p className="text-xl font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
+                  <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Caixa Atual',      value: formatCurrency(caixaAtual),                                  color: GREEN,      sub: null },
+                { label: 'Clientes Pagos',   value: `${pctPagos}%`,                                              color: GREEN,      sub: `${pagosArr.length} de ${totalClientes}` },
+                { label: 'Total Pendente',   value: formatCurrency(aReceber),                                    color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
+                { label: 'Saúde Financeira', value: saudeNivel,                                                   color: saudeColor, sub: lucroProjetado >= 0 ? 'lucro positivo' : 'despesas > receita' },
+              ].map(({ label, value, color, sub }) => (
+                <div key={label} className="rounded-xl px-4 py-3"
+                     style={{ background: '#272C30', border: `1px solid ${color}22` }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
+                  <p className="text-sm font-bold mt-1" style={{ color }}>{value}</p>
+                  {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -426,45 +581,6 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-          </div>
-        ))}
-      </div>
-
-      {/* 5 headline metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,                                          icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
-          { label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',                                      icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
-          { label: 'A Receber',        value: aReceber,          color: '#F59E0B',                                      icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto${atrasados.length > 0 ? ` (${atrasados.length} em atraso)` : ''}` },
-          { label: 'Despesas',         value: totalDespesas,     color: '#EF4444',                                      icon: DollarSign,   sub: 'previsto + confirmado' },
-          { label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444',        icon: Activity,     sub: 'receita prevista − despesas' },
-        ].map(({ label, value, color, icon: Icon, sub }) => (
-          <div key={label} className="rounded-xl p-4" style={{ background: '#272C30', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wider leading-tight">{label}</p>
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
-                <Icon size={13} style={{ color }} />
-              </div>
-            </div>
-            <p className="text-xl font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
-            <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Indicadores rápidos */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Caixa Atual',      value: formatCurrency(caixaAtual),                                  color: GREEN,      sub: null },
-          { label: 'Clientes Pagos',   value: `${pctPagos}%`,                                              color: GREEN,      sub: `${pagosArr.length} de ${totalClientes}` },
-          { label: 'Total Pendente',   value: formatCurrency(aReceber),                                    color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
-          { label: 'Saúde Financeira', value: saudeNivel,                                                   color: saudeColor, sub: lucroProjetado >= 0 ? 'lucro positivo' : 'despesas > receita' },
-        ].map(({ label, value, color, sub }) => (
-          <div key={label} className="rounded-xl px-4 py-3"
-               style={{ background: '#272C30', border: `1px solid ${color}22` }}>
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
-            <p className="text-sm font-bold mt-1" style={{ color }}>{value}</p>
-            {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
           </div>
         ))}
       </div>
