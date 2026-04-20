@@ -143,6 +143,7 @@ function TabFluxo() {
   // Delete manual
   const [confirmDel, setConfirmDel] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [pendingDeletes, setPendingDeletes] = useState(new Set())
 
   // Fatura do Cartão
   const [somenteCartao, setSomenteCartao] = useState(false)
@@ -231,7 +232,7 @@ function TabFluxo() {
 
   // Column filters aplicados sobre filtrados (declarados aqui, após filtrados)
   const colFilteredData = useMemo(() => {
-    let r = filtrados
+    let r = filtrados.filter(l => !pendingDeletes.has(l.id))
     if (somenteCartao)        r = r.filter(l => l.origem === 'cartao')
     if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
     if (colFilters.descricao) r = r.filter(l => (l.descricao || '').toLowerCase().includes(colFilters.descricao.toLowerCase()))
@@ -241,7 +242,7 @@ function TabFluxo() {
     if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
     if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
     return r
-  }, [filtrados, colFilters, somenteCartao])
+  }, [filtrados, colFilters, somenteCartao, pendingDeletes])
 
   const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
   const uniqueDatas = useMemo(() => [...new Set(lancamentos.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [lancamentos])
@@ -382,15 +383,24 @@ function TabFluxo() {
   }
 
   // ── Deletar lançamento manual ────────────────────────────────────────
-  const handleDeleteManual = async (id) => {
+  const handleDeleteManual = async (id, extraIds = []) => {
+    const allIds = [id, ...extraIds.filter(x => x !== id)]
     setDeletingId(id)
+    // Optimistic: hide immediately
+    setPendingDeletes(prev => new Set([...prev, ...allIds]))
     try {
-      await financeiroAPI.deleteLancamento(id)
+      for (const did of allIds) {
+        await financeiroAPI.deleteLancamento(did)
+      }
       setConfirmDel(null)
-      refetch()
     } catch (e) {
+      // Revert optimistic on error
+      setPendingDeletes(prev => { const s = new Set(prev); allIds.forEach(x => s.delete(x)); return s })
       alert('Erro ao excluir: ' + (e?.response?.data?.detail || e.message))
-    } finally { setDeletingId(null) }
+    } finally {
+      setDeletingId(null)
+      refetch().then(() => setPendingDeletes(new Set()))
+    }
   }
 
   const meses = [
@@ -1064,18 +1074,36 @@ function TabFluxo() {
     )}
 
     {/* ── Confirm: Excluir Lançamento ──────────────────────────── */}
-    {confirmDel && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-        <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-sm space-y-4">
-          <h2 className="text-white font-semibold text-lg">Excluir lançamento?</h2>
-          <p className="text-gray-400 text-sm">Esta ação não pode ser desfeita. O lançamento <span className="text-white font-medium">{confirmDel.descricao}</span> será removido permanentemente.</p>
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setConfirmDel(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
-            <button onClick={() => handleDeleteManual(confirmDel.id)} disabled={!!deletingId} className="px-4 py-2 text-sm bg-red-500 text-white rounded font-semibold hover:opacity-90 disabled:opacity-50">{deletingId ? 'Excluindo…' : 'Excluir'}</button>
+    {confirmDel && (() => {
+      // find duplicates: same descricao + fonte deletável
+      const dupIds = lancamentos
+        .filter(l => l.descricao === confirmDel.descricao && (l.fonte === 'manual' || l.fonte === 'fechamento') && l.id !== confirmDel.id)
+        .map(l => l.id)
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-sm space-y-4">
+            <h2 className="text-white font-semibold text-lg">Excluir lançamento?</h2>
+            <p className="text-gray-400 text-sm">Esta ação não pode ser desfeita. O lançamento <span className="text-white font-medium">{confirmDel.descricao}</span> será removido permanentemente.</p>
+            {dupIds.length > 0 && (
+              <p className="text-yellow-400 text-xs">⚠ Encontrado{dupIds.length > 1 ? 's' : ''} {dupIds.length} entrada{dupIds.length > 1 ? 's' : ''} duplicada{dupIds.length > 1 ? 's' : ''} com este nome.</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2 flex-wrap">
+              <button onClick={() => setConfirmDel(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+              {dupIds.length > 0 && (
+                <button
+                  onClick={() => handleDeleteManual(confirmDel.id, dupIds)}
+                  disabled={!!deletingId}
+                  className="px-4 py-2 text-sm rounded font-semibold hover:opacity-90 disabled:opacity-50"
+                  style={{ background: '#B91C1C', color: '#fff' }}>
+                  {deletingId ? 'Excluindo…' : `Excluir todos (${dupIds.length + 1})`}
+                </button>
+              )}
+              <button onClick={() => handleDeleteManual(confirmDel.id)} disabled={!!deletingId} className="px-4 py-2 text-sm bg-red-500 text-white rounded font-semibold hover:opacity-90 disabled:opacity-50">{deletingId ? 'Excluindo…' : 'Excluir este'}</button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
+      )
+    })()}
     </div>
   )
 }
