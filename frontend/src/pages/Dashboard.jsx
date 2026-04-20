@@ -90,12 +90,11 @@ export default function Dashboard() {
   )
   // Receita prevista = recebida + a receber (total esperado no mês)
   const receitaPrevista   = receitaConfirmada + aReceber
-  // Despesas: via resumo do fechamento (inclui novos gastos / reduções)
-  const totalDespesas     = typeof fRes.total_despesa === 'number'
-    ? fRes.total_despesa
-    : (op?.total_previsto_despesas_mes ?? 0)
-  // Lucro projetado: total receita − total despesas
-  const lucroProjetado    = receitaPrevista - totalDespesas
+  // Despesas: soma dinâmica do fluxo de caixa do mês (despesas pagas + a pagar)
+  // Fonte: useMemo sobre fluxoMesAtual.data — recomputa sempre que refetchAll() é chamado
+  const totalDespesasMes  = despesasMes.reduce((s, d) => s + d.valor, 0) + totalDespesasAPagarMes
+  // Lucro projetado: receita total prevista − total despesas do mês
+  const lucroProjetado    = receitaPrevista - totalDespesasMes
   const caixaAtual        = cx?.caixa_atual ?? op?.caixa_atual ?? 0
 
   const totalAtrasado  = atrasados.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
@@ -627,7 +626,7 @@ export default function Dashboard() {
                 { key: 'areceber', label: 'A Receber',        value: aReceber,          color: '#F59E0B',    icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto` },
                 { key: 'despesas', label: 'Despesas Pagas',   value: despesasMes.reduce((s, d) => s + d.valor, 0), color: '#EF4444', icon: DollarSign, sub: `${despesasMes.length} lançamentos pagos` },
                 { key: 'apagar',   label: 'Despesas a Pagar', value: totalDespesasAPagarMes, color: '#F97316', icon: TrendingDown, sub: `${despesasAPagarMes.length} pendentes` },
-                { key: 'lucro',    label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444', icon: Activity, sub: 'receita prevista − despesas' },
+                { key: 'lucro',    label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444', icon: Activity, sub: `receita prevista − despesas totais` },
               ].map(({ key, label, value, color, icon: Icon, sub }) => {
                 const isActive = expandMetricaMensal === key
                 return (
@@ -644,7 +643,7 @@ export default function Dashboard() {
                     </div>
                     <p className="text-lg font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
                     <p className="text-[10px] text-gray-500 mt-1">{sub}</p>
-                    {['recebida','areceber','despesas','apagar'].includes(key) && (
+                    {['recebida','areceber','despesas','apagar','lucro'].includes(key) && (
                       <p className="text-[10px] mt-1" style={{ color: isActive ? color : '#4B5563' }}>
                         {isActive ? '▲ fechar' : '▼ ver detalhes'}
                       </p>
@@ -788,6 +787,55 @@ export default function Dashboard() {
                 <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <span className="text-[10px] text-gray-600">Total pago</span>
                   <span className="text-xs font-bold text-red-400">{formatCurrency(despesasMes.reduce((s, d) => s + d.valor, 0))}</span>
+                </div>
+              </div>
+            )}
+
+            {expandMetricaMensal === 'lucro' && (
+              <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Detalhamento do Lucro Projetado em {mesRef}
+                </p>
+                {/* Receitas */}
+                <div className="space-y-1.5 mb-3">
+                  <p className="text-[10px] text-gray-600 uppercase tracking-wider">Receitas</p>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: `${GREEN}08`, border: `1px solid ${GREEN}15` }}>
+                    <span className="text-xs text-gray-300">Receita confirmada ({pagosArr.length} clientes)</span>
+                    <span className="text-xs font-bold" style={{ color: GREEN }}>{formatCurrency(receitaConfirmada)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                    <span className="text-xs text-gray-300">A receber ({pendentesMes.length + atrasados.length} clientes)</span>
+                    <span className="text-xs font-bold text-amber-400">{formatCurrency(aReceber)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.02]">
+                    <span className="text-xs font-semibold text-white">Receita prevista total</span>
+                    <span className="text-xs font-bold text-white">{formatCurrency(receitaPrevista)}</span>
+                  </div>
+                </div>
+                {/* Despesas */}
+                <div className="space-y-1.5 mb-3">
+                  <p className="text-[10px] text-gray-600 uppercase tracking-wider">Despesas</p>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.12)' }}>
+                    <span className="text-xs text-gray-300">Despesas pagas ({despesasMes.length})</span>
+                    <span className="text-xs font-bold text-red-400">{formatCurrency(despesasMes.reduce((s, d) => s + d.valor, 0))}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(249,115,22,0.05)', border: '1px solid rgba(249,115,22,0.12)' }}>
+                    <span className="text-xs text-gray-300">Despesas a pagar ({despesasAPagarMes.length})</span>
+                    <span className="text-xs font-bold text-orange-400">{formatCurrency(totalDespesasAPagarMes)}</span>
+                  </div>
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg bg-white/[0.02]">
+                    <span className="text-xs font-semibold text-white">Total despesas</span>
+                    <span className="text-xs font-bold text-white">{formatCurrency(totalDespesasMes)}</span>
+                  </div>
+                </div>
+                {/* Resultado */}
+                <div className="flex items-center justify-between py-2 px-3 rounded-lg border mt-2"
+                     style={{ background: lucroProjetado >= 0 ? `${GREEN}0a` : 'rgba(239,68,68,0.08)', borderColor: lucroProjetado >= 0 ? `${GREEN}25` : 'rgba(239,68,68,0.25)' }}>
+                  <div>
+                    <p className="text-xs font-semibold text-white">Lucro Projetado</p>
+                    <p className="text-[10px] text-gray-500">Receita prevista − Total despesas</p>
+                  </div>
+                  <p className="text-base font-black" style={{ color: lucroProjetado >= 0 ? GREEN : '#EF4444' }}>{formatCurrency(lucroProjetado)}</p>
                 </div>
               </div>
             )}

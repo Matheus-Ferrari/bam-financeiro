@@ -411,13 +411,13 @@ function TabFluxo() {
   ]
 
   const cards = [
-    { icon: DollarSign,   label: 'Saldo Inicial',       value: formatCompact(data?.saldo_inicial ?? 0),            color: '#818CF8', sub: 'caixa atual' },
-    { icon: ArrowUpCircle,label: 'Entradas Previstas',   value: formatCompact(data?.total_entradas_previsto ?? 0),  color: '#12F0C6', sub: 'no período' },
-    { icon: ArrowUpCircle,label: 'Entradas Realizadas',  value: formatCompact(data?.total_entradas_realizado ?? 0), color: '#10B981', sub: 'recebido' },
-    { icon: ArrowDownCircle,label:'Saídas Previstas',    value: formatCompact(data?.total_saidas_previsto ?? 0),    color: '#F59E0B', sub: 'no período' },
-    { icon: ArrowDownCircle,label:'Saídas Realizadas',   value: formatCompact(data?.total_saidas_realizado ?? 0),   color: '#EF4444', sub: 'pago' },
-    { icon: Banknote,     label: 'Saldo Final Previsto', value: formatCompact(data?.saldo_final_previsto ?? 0),     color: '#818CF8', sub: 'projetado' },
-    { icon: Banknote,     label: 'Saldo Realizado',      value: formatCompact(data?.saldo_final_realizado ?? 0),    color: '#12F0C6', sub: 'efetivo' },
+    { icon: DollarSign,   label: 'Saldo Inicial',        value: formatCompact(data?.saldo_inicial ?? 0),                                                                        color: '#818CF8', sub: 'caixa atual' },
+    { icon: ArrowUpCircle,label: 'A Receber',              value: formatCompact(Math.max(0, (data?.total_entradas_previsto ?? 0) - (data?.total_entradas_realizado ?? 0))),        color: '#12F0C6', sub: 'pendente' },
+    { icon: ArrowUpCircle,label: 'Entradas Realizadas',    value: formatCompact(data?.total_entradas_realizado ?? 0),                                                              color: '#10B981', sub: 'recebido' },
+    { icon: ArrowDownCircle,label:'A Pagar',               value: formatCompact(Math.max(0, (data?.total_saidas_previsto ?? 0) - (data?.total_saidas_realizado ?? 0))),            color: '#F59E0B', sub: 'pendente' },
+    { icon: ArrowDownCircle,label:'Saídas Realizadas',     value: formatCompact(data?.total_saidas_realizado ?? 0),                                                              color: '#EF4444', sub: 'pago' },
+    { icon: Banknote,     label: 'Saldo Final Previsto',   value: formatCompact(data?.saldo_final_previsto ?? 0),                                                                  color: '#818CF8', sub: 'projeção total' },
+    { icon: Banknote,     label: 'Saldo Realizado',        value: formatCompact(data?.saldo_final_realizado ?? 0),                                                                  color: '#12F0C6', sub: 'efetivo' },
   ]
 
   const divergencia = data?.divergencia ?? 0
@@ -985,14 +985,15 @@ function TabFluxo() {
             </p>
             <p className="text-[10px] text-gray-600 mt-0.5">excluindo fatura cartão</p>
           </div>
-          <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
-          <Resumo label="A Pagar no Período"    value={data.total_saidas_previsto - data.total_saidas_realizado}    color="#F59E0B" />
+          <Resumo label="Receita Prevista (total)"   value={data.total_entradas_previsto}                                         color="#12F0C6" />
+          <Resumo label="Despesas Previstas (total)"  value={data.total_saidas_previsto}                                           color="#F59E0B" />
           {/* Resultado previsto — pode ser negativo */}
           <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Previsto</p>
             <p className="text-base font-bold" style={{ color: (data.total_entradas_previsto - data.total_saidas_previsto) >= 0 ? '#12F0C6' : '#EF4444' }}>
               {formatCompact(data.total_entradas_previsto - data.total_saidas_previsto)}
             </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">receita total − despesas totais</p>
           </div>
         </div>
       )}
