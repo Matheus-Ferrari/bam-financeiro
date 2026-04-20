@@ -90,24 +90,12 @@ export default function Dashboard() {
   )
   // Receita prevista = recebida + a receber (total esperado no mês)
   const receitaPrevista   = receitaConfirmada + aReceber
-  // Despesas: soma dinâmica do fluxo de caixa do mês (despesas pagas + a pagar)
-  // Fonte: useMemo sobre fluxoMesAtual.data — recomputa sempre que refetchAll() é chamado
-  const totalDespesasMes  = despesasMes.reduce((s, d) => s + d.valor, 0) + totalDespesasAPagarMes
-  // Lucro projetado: receita total prevista − total despesas do mês
-  const lucroProjetado    = receitaPrevista - totalDespesasMes
   const caixaAtual        = cx?.caixa_atual ?? op?.caixa_atual ?? 0
 
   const totalAtrasado  = atrasados.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
   const totalPendente  = pendentesMes.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
   const totalClientes  = pagosArr.length + pendentesMes.length + atrasados.length
   const pctPagos       = totalClientes > 0 ? Math.round(pagosArr.length / totalClientes * 100) : 0
-
-  // ── Saúde financeira ─────────────────────────────────────────────
-  const margem         = receitaPrevista > 0 ? lucroProjetado / receitaPrevista : 0
-  const saudeNivel     = margem > 0.1 ? 'Saudável' : margem >= 0 ? 'Atenção' : 'Crítica'
-  const saudeColor     = margem > 0.1 ? GREEN : margem >= 0 ? '#F59E0B' : '#EF4444'
-  const saudeBg        = margem > 0.1 ? 'rgba(18,240,198,0.06)' : margem >= 0 ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)'
-  const saudeBorder    = margem > 0.1 ? 'rgba(18,240,198,0.2)' : margem >= 0 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'
 
   // ── Segmentos para alertas operacionais ──────────────────────────
   const vencendoHoje    = useMemo(() =>
@@ -248,6 +236,18 @@ export default function Dashboard() {
 
   const totalDespesasAPagarMes        = despesasAPagarMes.reduce((s, d) => s + d.valor, 0)
   const totalDespesasAPagarEssaSemana = despesasAPagarEssaSemana.reduce((s, d) => s + d.valor, 0)
+
+  // Despesas totais do mês (pagas + a pagar), excluindo cartão
+  const totalDespesasMes = despesasMes.reduce((s, d) => s + d.valor, 0) + totalDespesasAPagarMes
+  // Lucro projetado: receita total prevista − total despesas diretas do mês
+  const lucroProjetado   = receitaPrevista - totalDespesasMes
+
+  // ── Saúde financeira ─────────────────────────────────────────────
+  const margem     = receitaPrevista > 0 ? lucroProjetado / receitaPrevista : 0
+  const saudeNivel = margem > 0.1 ? 'Saudável' : margem >= 0 ? 'Atenção' : 'Crítica'
+  const saudeColor = margem > 0.1 ? GREEN : margem >= 0 ? '#F59E0B' : '#EF4444'
+  const saudeBg    = margem > 0.1 ? 'rgba(18,240,198,0.06)' : margem >= 0 ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)'
+  const saudeBorder= margem > 0.1 ? 'rgba(18,240,198,0.2)' : margem >= 0 ? 'rgba(245,158,11,0.2)' : 'rgba(239,68,68,0.2)'
 
   const saidasEssaSemana = useMemo(() =>
     todasDespesas.filter(d => {
