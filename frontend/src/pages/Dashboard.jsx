@@ -132,12 +132,19 @@ export default function Dashboard() {
     return { inicioSemana: inicio, inicioSemanaPasada: inicioPasada }
   }, [])
 
+  // parseDate: evita bug de UTC — '2026-04-20' vira local noon, timestamps ISO ficam como estão
+  const parseDate = (v) => {
+    if (!v) return new Date(0)
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v + 'T12:00:00')
+    return new Date(v)
+  }
+
   const pagosEssaSemana = useMemo(() =>
-    pagosArr.filter(c => { const d = new Date(c.data_pagamento || 0); return !isNaN(d.getTime()) && d >= inicioSemana })
+    pagosArr.filter(c => { const d = parseDate(c.data_pagamento); return !isNaN(d.getTime()) && d >= inicioSemana })
   , [pagosArr, inicioSemana])
 
   const pagosSemanaPasada = useMemo(() =>
-    pagosArr.filter(c => { const d = new Date(c.data_pagamento || 0); return !isNaN(d.getTime()) && d >= inicioSemanaPasada && d < inicioSemana })
+    pagosArr.filter(c => { const d = parseDate(c.data_pagamento); return !isNaN(d.getTime()) && d >= inicioSemanaPasada && d < inicioSemana })
   , [pagosArr, inicioSemana, inicioSemanaPasada])
 
   const cobradosPendentes = useMemo(() =>
@@ -170,14 +177,14 @@ export default function Dashboard() {
 
   const saidasEssaSemana = useMemo(() =>
     todasDespesas.filter(d => {
-      const dt = new Date(d.atualizado_em || d.data_pagamento || 0)
+      const dt = parseDate(d.atualizado_em || d.data_pagamento)
       return !isNaN(dt.getTime()) && dt >= inicioSemana
     })
   , [todasDespesas, inicioSemana])
 
   const saidasSemanaPasada = useMemo(() =>
     todasDespesas.filter(d => {
-      const dt = new Date(d.atualizado_em || d.data_pagamento || 0)
+      const dt = parseDate(d.atualizado_em || d.data_pagamento)
       return !isNaN(dt.getTime()) && dt >= inicioSemanaPasada && dt < inicioSemana
     })
   , [todasDespesas, inicioSemana, inicioSemanaPasada])
@@ -273,179 +280,191 @@ export default function Dashboard() {
         </div>
         {expandFinanceiro && tabFinanceiro === 'semanal' && (
           <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            {/* Comparativo 2×2: entradas + saídas, esta semana vs. semana passada */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
-              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↑ Receitas Semana Atual</p>
-                <p className="text-base font-bold mt-1" style={{ color: pagosEssaSemana.length > 0 ? GREEN : '#4B5563' }}>
-                  {pagosEssaSemana.length > 0 ? formatCurrency(totalEssaSemana) : '—'}
-                </p>
-                <p className="text-[10px] text-gray-600 mt-0.5">
-                  {pagosEssaSemana.length > 0
-                    ? `${pagosEssaSemana.length} ${pagosEssaSemana.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
-                    : 'Nenhum pagamento'}
-                </p>
-              </div>
-              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↓ Pagamentos Semana Atual</p>
-                <p className="text-base font-bold mt-1" style={{ color: saidasEssaSemana.length > 0 ? '#EF4444' : '#4B5563' }}>
-                  {saidasEssaSemana.length > 0 ? formatCurrency(totalSaidasEssaSemana) : '—'}
-                </p>
-                <p className="text-[10px] text-gray-600 mt-0.5">
-                  {saidasEssaSemana.length > 0
-                    ? `${saidasEssaSemana.length} ${saidasEssaSemana.length === 1 ? 'despesa paga' : 'despesas pagas'}`
-                    : 'Nenhuma saída'}
-                </p>
-              </div>
-              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↑ Receitas Semana Passada</p>
-                <p className="text-base font-bold mt-1 text-gray-300">
-                  {pagosSemanaPasada.length > 0 ? formatCurrency(totalSemanaPasada) : '—'}
-                </p>
-                <p className="text-[10px] text-gray-600 mt-0.5">
-                  {pagosSemanaPasada.length > 0
-                    ? `${pagosSemanaPasada.length} ${pagosSemanaPasada.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
-                    : 'Nenhum pagamento'}
-                </p>
-              </div>
-              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider">↓ Pagamentos Semana Passada</p>
-                <p className="text-base font-bold mt-1 text-gray-500">
-                  {saidasSemanaPasada.length > 0 ? formatCurrency(totalSaidasSemanaPasada) : '—'}
-                </p>
-                <p className="text-[10px] text-gray-600 mt-0.5">
-                  {saidasSemanaPasada.length > 0
-                    ? `${saidasSemanaPasada.length} ${saidasSemanaPasada.length === 1 ? 'despesa paga' : 'despesas pagas'}`
-                    : 'Nenhuma saída'}
-                </p>
-              </div>
-            </div>
+            {/* Layout 2 colunas: Esta Semana | Semana Passada */}
+            <div className="grid grid-cols-1 lg:grid-cols-2" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
 
-            <div className="px-4 py-3 space-y-3">
-              {/* Pipeline de cobrança */}
-              {(cobradosPendentes.length > 0 || prometeram.length > 0 || semCobrarArr.length > 0) && (
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pipeline de cobrança</p>
-                  <div className="space-y-1.5">
-                    {cobradosPendentes.length > 0 && (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
-                          <p className="text-xs text-gray-300">
-                            <span className="font-semibold text-blue-400">{cobradosPendentes.length}</span>
-                            {' '}{cobradosPendentes.length === 1 ? 'cobrado, aguardando' : 'cobrados, aguardando'}
-                          </p>
-                        </div>
-                        <p className="text-xs font-semibold text-blue-400">{formatCurrency(totalCobrados)}</p>
-                      </div>
-                    )}
-                    {prometeram.length > 0 && (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GREEN }} />
-                          <p className="text-xs text-gray-300">
-                            <span className="font-semibold" style={{ color: GREEN }}>{prometeram.length}</span>
-                            {' '}{prometeram.length === 1 ? 'prometeu pagar' : 'prometeram pagar'}
-                          </p>
-                        </div>
-                        <p className="text-xs font-semibold" style={{ color: GREEN }}>{formatCurrency(totalPrometeram)}</p>
-                      </div>
-                    )}
-                    {semCobrarArr.length > 0 && (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
-                          <p className="text-xs text-gray-400">
-                            <span className="font-semibold">{semCobrarArr.length}</span>
-                            {' '}sem cobrança realizada
-                          </p>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-500">{formatCurrency(totalSemCobrar)}</p>
-                      </div>
-                    )}
+              {/* ── Esta Semana ── */}
+              <div className="p-4 space-y-4 lg:border-r" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: GREEN }} />
+                    <p className="text-xs font-bold text-white uppercase tracking-wider">Esta Semana</p>
                   </div>
+                  <p className="text-[10px] text-gray-600">
+                    {inicioSemana.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} –{' '}
+                    {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </p>
                 </div>
-              )}
 
-              {/* Lista de pagamentos desta semana */}
-              {pagosEssaSemana.length > 0 && (
+                {/* Receitas desta semana */}
                 <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Receitas desta semana — clientes que pagaram</p>
-                  <div className="space-y-1">
-                    {pagosEssaSemana.slice(0, 6).map(c => {
-                      const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
-                      return (
-                        <div key={c.id} className="flex items-center justify-between py-0.5">
-                          <div className="flex items-center gap-2">
-                            <CheckCircle size={11} style={{ color: GREEN, flexShrink: 0 }} />
-                            <p className="text-xs text-gray-300 truncate max-w-[160px]">{c.nome}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                      <CheckCircle size={10} style={{ color: GREEN }} /> Receitas recebidas
+                    </p>
+                    <p className="text-[11px] font-bold" style={{ color: pagosEssaSemana.length > 0 ? GREEN : '#4B5563' }}>
+                      {formatCurrency(totalEssaSemana)}
+                    </p>
+                  </div>
+                  {pagosEssaSemana.length === 0 ? (
+                    <p className="text-xs text-gray-600 italic py-1">Nenhum recebimento de cliente ainda.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {pagosEssaSemana.map(c => {
+                        const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
+                        return (
+                          <div key={c.id} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(18,240,198,0.04)' }}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GREEN }} />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-white truncate">{c.nome}</p>
+                                {c.data_pagamento && <p className="text-[10px] text-gray-600">{new Date(c.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</p>}
+                              </div>
+                            </div>
+                            <p className="text-xs font-bold ml-3 whitespace-nowrap" style={{ color: GREEN }}>{formatCurrency(v)}</p>
                           </div>
-                          <p className="text-xs font-semibold ml-2 whitespace-nowrap" style={{ color: GREEN }}>{formatCurrency(v)}</p>
-                        </div>
-                      )
-                    })}
-                    {pagosEssaSemana.length > 6 && (
-                      <p className="text-[10px] text-gray-600 pt-0.5">+ {pagosEssaSemana.length - 6} mais</p>
-                    )}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Saídas desta semana (despesas + comissões pagas) */}
-              {saidasEssaSemana.length > 0 && (
+                {/* Despesas pagas esta semana */}
+                <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                      <TrendingDown size={10} className="text-red-400" /> Despesas pagas
+                    </p>
+                    <p className="text-[11px] font-bold text-red-400">{formatCurrency(totalSaidasEssaSemana)}</p>
+                  </div>
+                  {saidasEssaSemana.length === 0 ? (
+                    <p className="text-xs text-gray-600 italic py-1">Nenhuma despesa paga registrada.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {saidasEssaSemana.map((d, i) => (
+                        <div key={d.id || i} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.04)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-white truncate">{d.nome || d.descricao || 'Despesa'}</p>
+                              {d.categoria && <p className="text-[10px] text-gray-600">{d.categoria}</p>}
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold ml-3 whitespace-nowrap text-red-400">{formatCurrency(parseFloat(d.valor || 0))}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Semana Passada ── */}
+              <div className="p-4 space-y-4 border-t lg:border-t-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-gray-500" />
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Semana Passada</p>
+                  </div>
+                  <p className="text-[10px] text-gray-600">
+                    {inicioSemanaPasada.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} –{' '}
+                    {new Date(inicioSemana.getTime() - 86400000).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </p>
+                </div>
+
+                {/* Receitas semana passada */}
                 <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos desta semana — despesas pagas</p>
-                  <div className="space-y-1">
-                    {saidasEssaSemana.slice(0, 8).map((d, i) => (
-                      <div key={d.id || i} className="flex items-center justify-between py-0.5">
-                        <div className="flex items-center gap-2">
-                          <TrendingDown size={11} style={{ color: '#EF4444', flexShrink: 0 }} />
-                          <p className="text-xs text-gray-300 truncate max-w-[160px]">{d.nome || d.descricao || 'Despesa'}</p>
-                          {d.categoria && <span className="text-[10px] text-gray-600 hidden sm:inline">· {d.categoria}</span>}
-                        </div>
-                        <p className="text-xs font-semibold ml-2 whitespace-nowrap text-red-400">{formatCurrency(parseFloat(d.valor || 0))}</p>
-                      </div>
-                    ))}
-                    {saidasEssaSemana.length > 8 && (
-                      <p className="text-[10px] text-gray-600 pt-0.5">+ {saidasEssaSemana.length - 8} mais</p>
-                    )}
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                      <CheckCircle size={10} className="text-gray-500" /> Receitas recebidas
+                    </p>
+                    <p className="text-[11px] font-bold text-gray-400">{formatCurrency(totalSemanaPasada)}</p>
                   </div>
-                  <div className="flex justify-between items-center mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                    <span className="text-[10px] text-gray-600">Total saídas semana</span>
-                    <span className="text-xs font-bold text-red-400">{formatCurrency(totalSaidasEssaSemana)}</span>
-                  </div>
+                  {pagosSemanaPasada.length === 0 ? (
+                    <p className="text-xs text-gray-600 italic py-1">Nenhum recebimento registrado.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {pagosSemanaPasada.map(c => {
+                        const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
+                        return (
+                          <div key={c.id} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-gray-500 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-gray-300 truncate">{c.nome}</p>
+                                {c.data_pagamento && <p className="text-[10px] text-gray-600">{new Date(c.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</p>}
+                              </div>
+                            </div>
+                            <p className="text-xs font-bold ml-3 whitespace-nowrap text-gray-400">{formatCurrency(v)}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Saídas semana passada */}
-              {saidasSemanaPasada.length > 0 && (
-                <div>
-                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos semana passada — despesas pagas</p>
-                  <div className="space-y-1">
-                    {saidasSemanaPasada.slice(0, 5).map((d, i) => (
-                      <div key={d.id || i} className="flex items-center justify-between py-0.5">
-                        <div className="flex items-center gap-2">
-                          <TrendingDown size={11} style={{ color: '#6B7280', flexShrink: 0 }} />
-                          <p className="text-xs text-gray-500 truncate max-w-[160px]">{d.nome || d.descricao || 'Despesa'}</p>
+                {/* Despesas pagas semana passada */}
+                <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                      <TrendingDown size={10} className="text-gray-600" /> Despesas pagas
+                    </p>
+                    <p className="text-[11px] font-bold text-gray-500">{formatCurrency(totalSaidasSemanaPasada)}</p>
+                  </div>
+                  {saidasSemanaPasada.length === 0 ? (
+                    <p className="text-xs text-gray-600 italic py-1">Nenhuma despesa paga registrada.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {saidasSemanaPasada.map((d, i) => (
+                        <div key={d.id || i} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-gray-400 truncate">{d.nome || d.descricao || 'Despesa'}</p>
+                              {d.categoria && <p className="text-[10px] text-gray-600">{d.categoria}</p>}
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold ml-3 whitespace-nowrap text-gray-500">{formatCurrency(parseFloat(d.valor || 0))}</p>
                         </div>
-                        <p className="text-xs font-semibold ml-2 whitespace-nowrap text-gray-500">{formatCurrency(parseFloat(d.valor || 0))}</p>
-                      </div>
-                    ))}
-                    {saidasSemanaPasada.length > 5 && (
-                      <p className="text-[10px] text-gray-600 pt-0.5">+ {saidasSemanaPasada.length - 5} mais</p>
-                    )}
-                  </div>
-                  <div className="flex justify-between items-center mt-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                    <span className="text-[10px] text-gray-600">Total saídas semana passada</span>
-                    <span className="text-xs font-bold text-gray-500">{formatCurrency(totalSaidasSemanaPasada)}</span>
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-
-              {pagosEssaSemana.length === 0 && cobradosPendentes.length === 0 && prometeram.length === 0 && saidasEssaSemana.length === 0 && (
-                <p className="text-xs text-gray-600 text-center py-1">Nenhuma atividade registrada nesta semana.</p>
-              )}
+              </div>
             </div>
+
+            {/* Pipeline de cobrança (rodapé) */}
+            {(cobradosPendentes.length > 0 || prometeram.length > 0 || semCobrarArr.length > 0) && (
+              <div className="px-4 pb-4 pt-2 border-t space-y-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pipeline de cobrança</p>
+                {cobradosPendentes.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                      <p className="text-xs text-gray-300"><span className="font-semibold text-blue-400">{cobradosPendentes.length}</span>{' '}{cobradosPendentes.length === 1 ? 'cobrado, aguardando pagamento' : 'cobrados, aguardando pagamento'}</p>
+                    </div>
+                    <p className="text-xs font-semibold text-blue-400">{formatCurrency(totalCobrados)}</p>
+                  </div>
+                )}
+                {prometeram.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GREEN }} />
+                      <p className="text-xs text-gray-300"><span className="font-semibold" style={{ color: GREEN }}>{prometeram.length}</span>{' '}{prometeram.length === 1 ? 'prometeu pagar' : 'prometeram pagar'}</p>
+                    </div>
+                    <p className="text-xs font-semibold" style={{ color: GREEN }}>{formatCurrency(totalPrometeram)}</p>
+                  </div>
+                )}
+                {semCobrarArr.length > 0 && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                      <p className="text-xs text-gray-400"><span className="font-semibold">{semCobrarArr.length}</span>{' '}sem cobrança realizada</p>
+                    </div>
+                    <p className="text-xs font-semibold text-gray-500">{formatCurrency(totalSemCobrar)}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
