@@ -117,6 +117,7 @@ export default function Clientes() {
 
   // Loading states
   const [updatingPgto, setUpdatingPgto]   = useState(null)
+  const [updatingCob,  setUpdatingCob]    = useState(null)
 
   // ── Merge: backend clientes + fechamento values + localStorage ─
   // Fonte de verdade para valores: Fechamento page usa backend clientes_pagos/
@@ -272,11 +273,26 @@ export default function Clientes() {
   }
 
   const handleCobranca = async (cliente, cobrancaStatus) => {
-    await clientesAPI.update(cliente.id, {
-      cobranca_status: cobrancaStatus,
-      ultimo_contato:  new Date().toISOString().slice(0, 10),
-    })
-    refetchAll()
+    setUpdatingCob(cliente.id)
+    try {
+      const updateData = {
+        cobranca_status: cobrancaStatus,
+        ultimo_contato:  new Date().toISOString().slice(0, 10),
+      }
+      await clientesAPI.update(cliente.id, updateData)
+      // Sincronizar com localStorage do Fechamento para manter consistência
+      try {
+        const key = `bam-cov-${competencia}`
+        const ov = JSON.parse(localStorage.getItem(key) || '{}')
+        ov[cliente.id] = { ...(ov[cliente.id] || {}), ...updateData }
+        localStorage.setItem(key, JSON.stringify(ov))
+      } catch {}
+      refetchAll()
+    } catch (err) {
+      console.error('Erro ao atualizar status de cobrança:', err)
+    } finally {
+      setUpdatingCob(null)
+    }
   }
 
   const openCreate  = () => { setEditTarget(null); setModalOpen(true) }
@@ -490,9 +506,14 @@ export default function Clientes() {
                               </button>
                             )}
                             {c.status_pagamento !== 'pago' && (
-                              <button onClick={() => handleCobranca(c, 'cobrado')} title="Marcar como cobrado"
-                                className="w-7 h-7 rounded-md flex items-center justify-center text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10 transition-colors">
-                                <Phone size={11} />
+                              <button onClick={() => handleCobranca(c, c.cobranca_status === 'cobrado' ? 'sem_cobrar' : 'cobrado')}
+                                disabled={updatingCob === c.id}
+                                title={c.cobranca_status === 'cobrado' ? 'Clique para desfazer cobrança' : 'Marcar como cobrado'}
+                                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors disabled:opacity-40"
+                                style={c.cobranca_status === 'cobrado'
+                                  ? { color: '#60A5FA', background: 'rgba(96,165,250,0.12)' }
+                                  : { color: '#6B7280' }}>
+                                {updatingCob === c.id ? '…' : <Phone size={11} />}
                               </button>
                             )}
                             <button onClick={() => openEdit(c)}

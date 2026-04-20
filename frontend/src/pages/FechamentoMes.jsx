@@ -241,13 +241,20 @@ export default function FechamentoMes() {
     setCliMn(extras)
   }, [competencia, data])
 
-  // Carregar saldo e reserva do localStorage ao trocar competência
+  // Carregar saldo, reserva e fatura — Firebase (fechamento) tem prioridade; localStorage como fallback
   useEffect(() => {
-    const s = parseFloat(localStorage.getItem(`bam-saldo-${competencia}`) || '0')
-    const r = parseFloat(localStorage.getItem(`bam-reserva-${competencia}`) || '0')
+    const fbSaldo   = parseFloat(fech?.saldo_conta     ?? 'NaN')
+    const fbReserva = parseFloat(fech?.reserva_minima  ?? 'NaN')
+    const fbFatura  = parseFloat(fech?.fatura_cartao   ?? 'NaN')
+
+    const s = !isNaN(fbSaldo)   ? fbSaldo   : parseFloat(localStorage.getItem(`bam-saldo-${competencia}`)   || '0')
+    const r = !isNaN(fbReserva) ? fbReserva : parseFloat(localStorage.getItem(`bam-reserva-${competencia}`) || '0')
+    const f = !isNaN(fbFatura)  ? fbFatura  : parseFloat(localStorage.getItem('bam-fatura-cartao')          || '1700')
+
     setSaldoConta(s)
     setReservaMinima(r)
-  }, [competencia])
+    setFaturaCartao(f)
+  }, [competencia, fech])
 
   /* ── Cálculos locais (recalcula ao editar itens) ─────────────── */
   const totalDespConfirmadas = despesas.filter(d => d.status === 'confirmado' || d.status === 'pago').reduce((s, d) => s + (parseFloat(d.valor) || 0), 0)
@@ -430,7 +437,14 @@ export default function FechamentoMes() {
         reducoes,
         novos_gastos: novos,
         anotacoes,
+        saldo_conta:    saldoConta,
+        reserva_minima: reservaMinima,
+        fatura_cartao:  faturaCartao,
       })
+      // Sincronizar localStorage com os valores salvos
+      localStorage.setItem(`bam-saldo-${competencia}`, String(saldoConta))
+      localStorage.setItem(`bam-reserva-${competencia}`, String(reservaMinima))
+      localStorage.setItem('bam-fatura-cartao', String(faturaCartao))
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
       refetch()
@@ -495,6 +509,9 @@ export default function FechamentoMes() {
     setSaldoConta(s)
     setReservaMinima(r)
     setEditandoCaixa(false)
+    // Persistir no Firebase junto com o fechamento atual
+    fechamentoAPI.save({ competencia, despesas_previstas: despesas, reducoes, novos_gastos: novos, anotacoes, saldo_conta: s, reserva_minima: r, fatura_cartao: faturaCartao })
+      .then(() => refetch()).catch(() => {})
   }
 
   const salvarFatura = () => {
@@ -502,6 +519,9 @@ export default function FechamentoMes() {
     localStorage.setItem('bam-fatura-cartao', String(f))
     setFaturaCartao(f)
     setEditandoFatura(false)
+    // Persistir no Firebase junto com o fechamento atual
+    fechamentoAPI.save({ competencia, despesas_previstas: despesas, reducoes, novos_gastos: novos, anotacoes, saldo_conta: saldoConta, reserva_minima: reservaMinima, fatura_cartao: f })
+      .then(() => refetch()).catch(() => {})
   }
 
   const openHubModal = (type, item = null) => {

@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [markingId, setMarkingId]             = useState(null)
   const [expandAtrasados, setExpandAtrasados] = useState(true)
   const [expandAlertCard, setExpandAlertCard] = useState(null) // 'hoje'|'proximos'|'atrasados'|'maiores'
+  const [expandResumoSemanal, setExpandResumoSemanal] = useState(true)
 
   const op = operacao.data
   const cx = caixa.data
@@ -40,11 +41,20 @@ export default function Dashboard() {
     const valor = parseFloat(cliente.valor_mensal || cliente.valor_previsto || cliente.valor || 0)
     setMarkingId(cliente.id)
     try {
-      await clientesAPI.update(cliente.id, {
+      const updateData = {
         status_pagamento: 'pago',
         valor_recebido:   valor,
         data_pagamento:   now.toISOString().split('T')[0],
-      })
+        cobranca_status:  'pago',
+      }
+      await clientesAPI.update(cliente.id, updateData)
+      // Sincronizar com localStorage para que FechamentoMes reflita imediatamente
+      try {
+        const key = `bam-cov-${competencia}`
+        const ov = JSON.parse(localStorage.getItem(key) || '{}')
+        ov[cliente.id] = { ...(ov[cliente.id] || {}), ...updateData }
+        localStorage.setItem(key, JSON.stringify(ov))
+      } catch {}
       refetchAll()
     } catch { }
     finally { setMarkingId(null) }
@@ -110,6 +120,41 @@ export default function Dashboard() {
       .slice(0, 5)
   , [pendentesMes])
 
+  // ── Resumo semanal — calculado sobre pagosArr já disponível ─────
+  const { inicioSemana, inicioSemanaPasada } = useMemo(() => {
+    const d = new Date()
+    const diasParaSegunda = d.getDay() === 0 ? 6 : d.getDay() - 1
+    const inicio = new Date(d.getFullYear(), d.getMonth(), d.getDate() - diasParaSegunda)
+    const inicioPasada = new Date(inicio.getFullYear(), inicio.getMonth(), inicio.getDate() - 7)
+    return { inicioSemana: inicio, inicioSemanaPasada: inicioPasada }
+  }, [])
+
+  const pagosEssaSemana = useMemo(() =>
+    pagosArr.filter(c => { const d = new Date(c.data_pagamento || 0); return !isNaN(d.getTime()) && d >= inicioSemana })
+  , [pagosArr, inicioSemana])
+
+  const pagosSemanaPasada = useMemo(() =>
+    pagosArr.filter(c => { const d = new Date(c.data_pagamento || 0); return !isNaN(d.getTime()) && d >= inicioSemanaPasada && d < inicioSemana })
+  , [pagosArr, inicioSemana, inicioSemanaPasada])
+
+  const cobradosPendentes = useMemo(() =>
+    [...pendentesMes, ...atrasados].filter(c => c.cobranca_status === 'cobrado')
+  , [pendentesMes, atrasados])
+
+  const prometeram = useMemo(() =>
+    [...pendentesMes, ...atrasados].filter(c => c.cobranca_status === 'prometeu_pagamento')
+  , [pendentesMes, atrasados])
+
+  const semCobrarArr = useMemo(() =>
+    [...pendentesMes, ...atrasados].filter(c => !c.cobranca_status || c.cobranca_status === 'sem_cobrar' || c.cobranca_status === 'cobrar_hoje')
+  , [pendentesMes, atrasados])
+
+  const totalEssaSemana    = pagosEssaSemana.reduce((s, c) => s + parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  const totalSemanaPasada  = pagosSemanaPasada.reduce((s, c) => s + parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  const totalCobrados      = cobradosPendentes.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  const totalPrometeram    = prometeram.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  const totalSemCobrar     = semCobrarArr.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+
   // ── Frases dinâmicas "Visão de Hoje" ────────────────────────────
   const frases = useMemo(() => {
     const msgs = []
@@ -164,6 +209,131 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ── Atividade da Semana ───────────────────────────────────── */}
+      <div className="rounded-xl overflow-hidden" style={{ background: '#1A1E21', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <button
+          onClick={() => setExpandResumoSemanal(v => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-white/[0.02] transition">
+          <div className="flex items-center gap-2">
+            <Activity size={13} style={{ color: GREEN }} />
+            <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Atividade da Semana</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {(pagosEssaSemana.length > 0 || cobradosPendentes.length > 0) && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: `${GREEN}18`, color: GREEN }}>
+                {pagosEssaSemana.length > 0 ? `${pagosEssaSemana.length} pagtos` : `${cobradosPendentes.length} cobrados`}
+              </span>
+            )}
+            <span className="text-[10px] text-gray-600">{expandResumoSemanal ? 'Recolher' : 'Expandir'}</span>
+          </div>
+        </button>
+        {expandResumoSemanal && (
+          <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            {/* Comparativo de pagamentos: esta semana vs. semana passada */}
+            <div className="grid grid-cols-2 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Esta semana</p>
+                <p className="text-base font-bold mt-1" style={{ color: pagosEssaSemana.length > 0 ? GREEN : '#4B5563' }}>
+                  {pagosEssaSemana.length > 0 ? formatCurrency(totalEssaSemana) : '—'}
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  {pagosEssaSemana.length > 0
+                    ? `${pagosEssaSemana.length} ${pagosEssaSemana.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
+                    : 'Nenhum pagamento registrado'}
+                </p>
+              </div>
+              <div className="px-4 py-3" style={{ background: '#1A1E21' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Semana passada</p>
+                <p className="text-base font-bold mt-1 text-gray-300">
+                  {pagosSemanaPasada.length > 0 ? formatCurrency(totalSemanaPasada) : '—'}
+                </p>
+                <p className="text-[10px] text-gray-600 mt-0.5">
+                  {pagosSemanaPasada.length > 0
+                    ? `${pagosSemanaPasada.length} ${pagosSemanaPasada.length === 1 ? 'cliente pagou' : 'clientes pagaram'}`
+                    : 'Nenhum pagamento registrado'}
+                </p>
+              </div>
+            </div>
+
+            <div className="px-4 py-3 space-y-3">
+              {/* Pipeline de cobrança */}
+              {(cobradosPendentes.length > 0 || prometeram.length > 0 || semCobrarArr.length > 0) && (
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pipeline de cobrança</p>
+                  <div className="space-y-1.5">
+                    {cobradosPendentes.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                          <p className="text-xs text-gray-300">
+                            <span className="font-semibold text-blue-400">{cobradosPendentes.length}</span>
+                            {' '}{cobradosPendentes.length === 1 ? 'cobrado, aguardando' : 'cobrados, aguardando'}
+                          </p>
+                        </div>
+                        <p className="text-xs font-semibold text-blue-400">{formatCurrency(totalCobrados)}</p>
+                      </div>
+                    )}
+                    {prometeram.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: GREEN }} />
+                          <p className="text-xs text-gray-300">
+                            <span className="font-semibold" style={{ color: GREEN }}>{prometeram.length}</span>
+                            {' '}{prometeram.length === 1 ? 'prometeu pagar' : 'prometeram pagar'}
+                          </p>
+                        </div>
+                        <p className="text-xs font-semibold" style={{ color: GREEN }}>{formatCurrency(totalPrometeram)}</p>
+                      </div>
+                    )}
+                    {semCobrarArr.length > 0 && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-gray-600 flex-shrink-0" />
+                          <p className="text-xs text-gray-400">
+                            <span className="font-semibold">{semCobrarArr.length}</span>
+                            {' '}sem cobrança realizada
+                          </p>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-500">{formatCurrency(totalSemCobrar)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Lista de pagamentos desta semana */}
+              {pagosEssaSemana.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Pagamentos desta semana</p>
+                  <div className="space-y-1">
+                    {pagosEssaSemana.slice(0, 6).map(c => {
+                      const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
+                      return (
+                        <div key={c.id} className="flex items-center justify-between py-0.5">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle size={11} style={{ color: GREEN, flexShrink: 0 }} />
+                            <p className="text-xs text-gray-300 truncate max-w-[160px]">{c.nome}</p>
+                          </div>
+                          <p className="text-xs font-semibold ml-2 whitespace-nowrap" style={{ color: GREEN }}>{formatCurrency(v)}</p>
+                        </div>
+                      )
+                    })}
+                    {pagosEssaSemana.length > 6 && (
+                      <p className="text-[10px] text-gray-600 pt-0.5">+ {pagosEssaSemana.length - 6} mais</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {pagosEssaSemana.length === 0 && cobradosPendentes.length === 0 && prometeram.length === 0 && (
+                <p className="text-xs text-gray-600 text-center py-1">Nenhuma atividade registrada nesta semana.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Saúde Financeira ─────────────────────────────────────── */}
