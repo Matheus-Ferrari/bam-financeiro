@@ -351,6 +351,26 @@ export class FluxoCaixaService {
       if (!Object.keys(ov).length) return l;
       const updated = { ...l };
       for (const f of fields) if (ov[f] != null) updated[f] = ov[f];
+      // Aplicar status e valor_realizado do override (crítico para fech_ e rec_ entries)
+      if (ov.status != null) {
+        updated.status = ov.status;
+        const isPago = ov.status === "pago" || ov.status === "recebido";
+        if (ov.valor_realizado != null) {
+          updated.valor_realizado = toFloat(ov.valor_realizado);
+        } else if (isPago && toFloat(updated.valor_realizado) === 0) {
+          updated.valor_realizado = toFloat(updated.valor_previsto);
+        }
+        // Preencher data_pagamento quando status = pago/recebido
+        if (isPago && !updated.data_pagamento) {
+          updated.data_pagamento = String(ov.atualizado_em || updated.data_vencimento || updated.data_competencia || "").slice(0, 10) || null;
+        }
+        if (!isPago) {
+          updated.data_pagamento = null;
+          updated.valor_realizado = 0;
+        }
+      } else if (ov.valor_realizado != null) {
+        updated.valor_realizado = toFloat(ov.valor_realizado);
+      }
       return updated;
     });
   }

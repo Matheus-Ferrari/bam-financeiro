@@ -453,38 +453,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Todas as despesas pagas do mês (inclui as sem data específica de semana) */}
-            {despesasMes.length > 0 && (
-              <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
-                  Todas as despesas pagas em {mesRef}
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {despesasMes.map((d, i) => (
-                    <div key={d.id || i} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.08)' }}>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <TrendingDown size={10} className="text-red-500 flex-shrink-0" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-medium text-white truncate">{d.nome}</p>
-                          <p className="text-[10px] text-gray-600">
-                            {d.categoria && <span>{d.categoria}</span>}
-                            {d.data_pagamento && (
-                              <span> · {new Date(d.data_pagamento.length === 10 ? d.data_pagamento + 'T12:00:00' : d.data_pagamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                      <p className="text-xs font-bold ml-2 whitespace-nowrap text-red-400">{formatCurrency(d.valor)}</p>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between items-center mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-                  <span className="text-[10px] text-gray-600">Total pago em {mesRef}</span>
-                  <span className="text-xs font-bold text-red-400">{formatCurrency(despesasMes.reduce((s, d) => s + d.valor, 0))}</span>
-                </div>
-              </div>
-            )}
-
             {/* Pipeline de cobrança (rodapé) */}
             {(cobradosPendentes.length > 0 || prometeram.length > 0 || semCobrarArr.length > 0) && (
               <div className="px-4 pb-4 pt-2 border-t space-y-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
