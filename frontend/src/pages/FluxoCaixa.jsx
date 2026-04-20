@@ -3,7 +3,7 @@ import {
   RefreshCw, TrendingUp, TrendingDown, DollarSign, CheckCircle,
   AlertCircle, Clock, Filter, X, ChevronDown, Users,
   ArrowUpCircle, ArrowDownCircle, Banknote, Search, Edit2, Save,
-  Plus, Trash2,
+  Plus, Trash2, CreditCard,
 } from 'lucide-react'
 import {
   useFluxoCaixa,
@@ -144,6 +144,11 @@ function TabFluxo() {
   const [confirmDel, setConfirmDel] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
+  // Fatura do Cartão
+  const [somenteCartao, setSomenteCartao] = useState(false)
+  const [conferirFaturaOpen, setConferirFaturaOpen] = useState(false)
+  const [faturaValorReal, setFaturaValorReal] = useState('')
+
   // Column-level filters (unique value dropdowns under each header)
   const [colFilters, setColFilters] = useState({ data: '', descricao: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
   const setCol = (col, val) => setColFilters(f => ({ ...f, [col]: val }))
@@ -164,6 +169,35 @@ function TabFluxo() {
   const { data: clientesData } = useClientes()
 
   const lancamentos = data?.lancamentos ?? []
+
+  // ── Fatura do Cart\u00e3o ──────────────────────────────────────────────────────
+  const lancamentosCartao = useMemo(
+    () => lancamentos.filter(l => l.origem === 'cartao'),
+    [lancamentos]
+  )
+  const totalFaturaCartao = useMemo(
+    () => lancamentosCartao.reduce((s, l) => {
+      const v = l.valor_realizado > 0 ? l.valor_realizado : (l.valor_previsto || 0)
+      return s + v
+    }, 0),
+    [lancamentosCartao]
+  )
+  const faturaTodasPagas = lancamentosCartao.length > 0 && lancamentosCartao.every(l => l.status === 'pago')
+  const proximoMesData = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 5)
+  const dataFaturaStr  = proximoMesData.toISOString().slice(0, 10)
+  const dataFaturaFmt  = proximoMesData.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const faturaValorDif = faturaValorReal !== '' ? parseFloat(faturaValorReal || '0') - totalFaturaCartao : null
+
+  // Totais locais excluindo cart\u00e3o (para caixa real)
+  const totalPagoSemCartao = useMemo(
+    () => lancamentos.filter(l => l.origem !== 'cartao' && l.tipo === 'saida').reduce((s, l) => s + (l.valor_realizado || 0), 0),
+    [lancamentos]
+  )
+  const totalRecebidoLocal = useMemo(
+    () => lancamentos.filter(l => l.tipo === 'entrada').reduce((s, l) => s + (l.valor_realizado || 0), 0),
+    [lancamentos]
+  )
+
   const clientesNomes = useMemo(
     () => (clientesData?.clientes ?? []).map(c => c.nome).filter(Boolean).sort(),
     [clientesData]
@@ -198,6 +232,7 @@ function TabFluxo() {
   // Column filters aplicados sobre filtrados (declarados aqui, após filtrados)
   const colFilteredData = useMemo(() => {
     let r = filtrados
+    if (somenteCartao)        r = r.filter(l => l.origem === 'cartao')
     if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
     if (colFilters.descricao) r = r.filter(l => (l.descricao || '').toLowerCase().includes(colFilters.descricao.toLowerCase()))
     if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
@@ -206,7 +241,7 @@ function TabFluxo() {
     if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
     if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
     return r
-  }, [filtrados, colFilters])
+  }, [filtrados, colFilters, somenteCartao])
 
   const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
   const uniqueDatas = useMemo(() => [...new Set(lancamentos.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [lancamentos])
@@ -405,6 +440,196 @@ function TabFluxo() {
         </div>
       )}
 
+
+      {/* Fatura do Cartao */}
+      {!loading && lancamentosCartao.length > 0 && (
+        <div className="rounded-xl border p-4 space-y-3"
+             style={{ background: 'rgba(129,140,248,0.05)', borderColor: 'rgba(129,140,248,0.25)' }}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CreditCard size={15} style={{ color: '#818CF8' }} />
+              <p className="text-sm font-semibold text-white">Fatura do Cartão (Fechamento Atual)</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={faturaTodasPagas
+                  ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
+                  : { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>
+                {faturaTodasPagas ? '✓ Pago' : 'Em aberto'}
+              </span>
+            </div>
+            <button
+              onClick={() => setConferirFaturaOpen(v => !v)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+              style={{ background: 'rgba(129,140,248,0.15)', color: '#818CF8', border: '1px solid rgba(129,140,248,0.3)' }}>
+              <CreditCard size={11} /> {conferirFaturaOpen ? 'Fechar conferência' : 'Conferir com valor real'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total da Fatura</p>
+              <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Lançamentos</p>
+              <p className="text-base font-bold text-white">{lancamentosCartao.length}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Vencimento</p>
+              <p className="text-base font-bold text-white">{dataFaturaFmt}</p>
+              <p className="text-[10px] text-gray-600 mt-0.5">dia 05 do próximo mês</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Você precisa ter até dia 05</p>
+              <p className="text-base font-bold" style={{ color: '#F59E0B' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+          </div>
+
+          {conferirFaturaOpen && (
+            <div className="border-t pt-3 space-y-3" style={{ borderColor: 'rgba(129,140,248,0.15)' }}>
+              <p className="text-xs text-gray-400 font-medium">Conferência de Fatura</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Calculado no sistema</p>
+                  <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Valor real da fatura</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 3225.00"
+                    value={faturaValorReal}
+                    onChange={e => setFaturaValorReal(e.target.value)}
+                    className="w-full bg-transparent text-base font-bold text-white outline-none border-b pb-0.5 transition-colors"
+                    style={{ borderColor: faturaValorReal ? 'rgba(129,140,248,0.4)' : 'rgba(255,255,255,0.1)' }}
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1">informe o valor do boleto/fatura</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Diferença</p>
+                  <p className="text-base font-bold" style={{
+                    color: faturaValorDif === null ? '#4B5563' : Math.abs(faturaValorDif) < 0.01 ? '#12F0C6' : '#F59E0B'
+                  }}>
+                    {faturaValorDif === null ? '—' : formatCurrency(faturaValorDif)}
+                  </p>
+                </div>
+              </div>
+              {faturaValorDif !== null && Math.abs(faturaValorDif) >= 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <AlertCircle size={13} style={{ color: '#F59E0B', flexShrink: 0 }} />
+                  <p className="text-xs text-yellow-300">
+                    Diferença de <strong>{formatCurrency(Math.abs(faturaValorDif))}</strong> encontrada. Verifique os lançamentos do cartão.
+                  </p>
+                </div>
+              )}
+              {faturaValorDif !== null && Math.abs(faturaValorDif) < 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(18,240,198,0.08)', border: '1px solid rgba(18,240,198,0.15)' }}>
+                  <CheckCircle size={13} style={{ color: '#12F0C6', flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: '#12F0C6' }}>Fatura confere com o sistema ✓</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {/* Fatura do Cartao */}
+      {!loading && lancamentosCartao.length > 0 && (
+        <div className="rounded-xl border p-4 space-y-3"
+             style={{ background: 'rgba(129,140,248,0.05)', borderColor: 'rgba(129,140,248,0.25)' }}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CreditCard size={15} style={{ color: '#818CF8' }} />
+              <p className="text-sm font-semibold text-white">Fatura do Cartão (Fechamento Atual)</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={faturaTodasPagas
+                  ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
+                  : { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>
+                {faturaTodasPagas ? '✓ Pago' : 'Em aberto'}
+              </span>
+            </div>
+            <button
+              onClick={() => setConferirFaturaOpen(v => !v)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+              style={{ background: 'rgba(129,140,248,0.15)', color: '#818CF8', border: '1px solid rgba(129,140,248,0.3)' }}>
+              <CreditCard size={11} /> {conferirFaturaOpen ? 'Fechar conferência' : 'Conferir com valor real'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total da Fatura</p>
+              <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Lançamentos</p>
+              <p className="text-base font-bold text-white">{lancamentosCartao.length}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Vencimento</p>
+              <p className="text-base font-bold text-white">{dataFaturaFmt}</p>
+              <p className="text-[10px] text-gray-600 mt-0.5">dia 05 do próximo mês</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Você precisa ter até dia 05</p>
+              <p className="text-base font-bold" style={{ color: '#F59E0B' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+          </div>
+
+          {conferirFaturaOpen && (
+            <div className="border-t pt-3 space-y-3" style={{ borderColor: 'rgba(129,140,248,0.15)' }}>
+              <p className="text-xs text-gray-400 font-medium">Conferência de Fatura</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Calculado no sistema</p>
+                  <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Valor real da fatura</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 3225.00"
+                    value={faturaValorReal}
+                    onChange={e => setFaturaValorReal(e.target.value)}
+                    className="w-full bg-transparent text-base font-bold text-white outline-none border-b pb-0.5 transition-colors"
+                    style={{ borderColor: faturaValorReal ? 'rgba(129,140,248,0.4)' : 'rgba(255,255,255,0.1)' }}
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1">informe o valor do boleto/fatura</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Diferença</p>
+                  <p className="text-base font-bold" style={{
+                    color: faturaValorDif === null ? '#4B5563' : Math.abs(faturaValorDif) < 0.01 ? '#12F0C6' : '#F59E0B'
+                  }}>
+                    {faturaValorDif === null ? '—' : formatCurrency(faturaValorDif)}
+                  </p>
+                </div>
+              </div>
+              {faturaValorDif !== null && Math.abs(faturaValorDif) >= 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <AlertCircle size={13} style={{ color: '#F59E0B', flexShrink: 0 }} />
+                  <p className="text-xs text-yellow-300">
+                    Diferença de <strong>{formatCurrency(Math.abs(faturaValorDif))}</strong> encontrada. Verifique os lançamentos do cartão.
+                  </p>
+                </div>
+              )}
+              {faturaValorDif !== null && Math.abs(faturaValorDif) < 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(18,240,198,0.08)', border: '1px solid rgba(18,240,198,0.15)' }}>
+                  <CheckCircle size={13} style={{ color: '#12F0C6', flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: '#12F0C6' }}>Fatura confere com o sistema ✓</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* â”€â”€ Filtros â”€â”€ */}
       <Card title="Filtros">
         <div className="flex flex-wrap gap-3 items-end">
@@ -483,6 +708,15 @@ function TabFluxo() {
             />
           </div>
 
+          {/* Filtro rapido Cartao */}
+          <button
+            onClick={() => setSomenteCartao(v => !v)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+            style={somenteCartao
+              ? { background: '#818CF8', color: '#000' }
+              : { background: 'rgba(255,255,255,0.05)', color: '#9CA3AF' }}>
+            <CreditCard size={12} /> Apenas Cartão
+          </button>
           <Button variant="ghost" size="sm" onClick={refetch}><RefreshCw size={13} /></Button>
         </div>
       </Card>
@@ -657,8 +891,9 @@ function TabFluxo() {
                               value={editRow.valor_realizado}
                               onChange={e => handleEditChange('valor_realizado', e.target.value)} />
                           : <span className="font-semibold"
-                              style={{ color: l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
-                              {formatCurrency(l.valor_realizado)}
+                              title={l.origem === 'cartao' ? 'Será pago na fatura do cartão' : undefined}
+                              style={{ color: l.origem === 'cartao' ? '#818CF8' : l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
+                              {formatCurrency(l.origem === 'cartao' && l.valor_realizado === 0 ? l.valor_previsto : l.valor_realizado)}
                             </span>
                         }
                       </td>
@@ -683,7 +918,12 @@ function TabFluxo() {
                               onChange={e => handleEditChange('origem', e.target.value)}>
                               {ORIGENS_OPCOES.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                             </select>
-                          : <span className="text-gray-500">{origemLabel(l.origem)}</span>
+                          : l.origem === 'cartao'
+                            ? <span className="flex items-center gap-1" title="Será pago na fatura do cartão">
+                                <CreditCard size={10} style={{ color: '#818CF8' }} />
+                                <span style={{ color: '#818CF8' }}>Cartão</span>
+                              </span>
+                            : <span className="text-gray-500">{origemLabel(l.origem)}</span>
                         }
                       </td>
 
@@ -777,6 +1017,35 @@ function TabFluxo() {
                     </tr>
                   )
                 })}
+                {/* Lancamento ficticio da fatura do cartao */}
+                {totalFaturaCartao > 0 && !somenteCartao && (
+                  <tr className="border-t-2" style={{ borderColor: 'rgba(129,140,248,0.3)', background: 'rgba(129,140,248,0.04)' }}>
+                    <td className="py-2 px-2 text-gray-400 whitespace-nowrap text-xs">{dataFaturaStr}</td>
+                    <td className="py-2 px-2 whitespace-nowrap" style={{ minWidth: 130 }}>
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard size={11} style={{ color: '#818CF8' }} />
+                        <span className="text-white font-medium text-xs">Pagamento fatura cartão</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-2 text-gray-500 text-xs">—</td>
+                    <td className="py-2 px-2 text-gray-400 text-xs">Cartão de Crédito</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="font-semibold text-xs" style={{ color: '#EF4444' }}>Saída</span>
+                    </td>
+                    <td className="py-2 px-2 text-right whitespace-nowrap text-gray-300 text-xs">{formatCurrency(totalFaturaCartao)}</td>
+                    <td className="py-2 px-2 text-right whitespace-nowrap text-xs" style={{ color: '#6B7280' }}>{formatCurrency(0)}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(129,140,248,0.15)', color: '#818CF8' }}>Previsto</span>
+                    </td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="flex items-center gap-1 text-[10px]" style={{ color: '#818CF8' }}>
+                        <CreditCard size={10} /> cartao_fatura
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 whitespace-nowrap text-gray-600 text-[10px]">—</td>
+                    <td className="py-2 px-2 whitespace-nowrap text-gray-600 text-[10px]">auto</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -786,14 +1055,20 @@ function TabFluxo() {
       {/* â”€â”€ Resumo lateral â”€â”€ */}
       {!loading && data && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <Resumo label="Total Recebido"        value={data.total_entradas_realizado} color="#12F0C6" />
-          <Resumo label="Total Pago"            value={data.total_saidas_realizado}    color="#EF4444" />
-          {/* Resultado realizado — pode ser negativo, então não usa Resumo que clampa */}
+          <Resumo label="Total Recebido" value={data.total_entradas_realizado} color="#12F0C6" />
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Pago (s/ cartão)</p>
+            <p className="text-base font-bold" style={{ color: '#EF4444' }}>{formatCompact(totalPagoSemCartao)}</p>
+            {totalFaturaCartao > 0 && (
+              <p className="text-[10px] mt-0.5" style={{ color: '#818CF8' }}>+{formatCompact(totalFaturaCartao)} na fatura</p>
+            )}
+          </div>
           <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
             <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Realizado</p>
-            <p className="text-base font-bold" style={{ color: (data.total_entradas_realizado - data.total_saidas_realizado) >= 0 ? '#12F0C6' : '#EF4444' }}>
-              {formatCompact(data.total_entradas_realizado - data.total_saidas_realizado)}
+            <p className="text-base font-bold" style={{ color: (totalRecebidoLocal - totalPagoSemCartao) >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {formatCompact(totalRecebidoLocal - totalPagoSemCartao)}
             </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">excluindo fatura cartão</p>
           </div>
           <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
           <Resumo label="A Pagar no Período"    value={data.total_saidas_previsto - data.total_saidas_realizado}    color="#F59E0B" />
