@@ -1098,7 +1098,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">Despesas</span>
-                <span className="text-sm font-bold text-red-400">{formatCurrency(totalDespesas)}</span>
+                <span className="text-sm font-bold text-red-400">{formatCurrency(totalDespesasMes)}</span>
               </div>
               <div className="flex items-center justify-between pt-1 border-t" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
                 <span className="text-xs text-gray-400 font-medium">Lucro proj.</span>
