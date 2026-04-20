@@ -1,6 +1,6 @@
 ﻿import { useState, useMemo } from 'react'
 import { RefreshCw, CalendarCheck, TrendingUp, CheckCircle, AlertTriangle, Clock, ArrowRight, DollarSign, Activity, Zap, Users, MessageSquare, TrendingDown } from 'lucide-react'
-import { useKpis, useOperacaoMes, useCaixa, useFechamento, useDespesasLocais, useComissoes } from '../hooks/useFinanceiro'
+import { useKpis, useOperacaoMes, useCaixa, useFechamento, useFluxoCaixa } from '../hooks/useFinanceiro'
 import QuickUpdatePanel from '../components/dashboard/QuickUpdatePanel'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -24,21 +24,23 @@ export default function Dashboard() {
   const operacao   = useOperacaoMes()
   const caixa      = useCaixa()
   const fech       = useFechamento(competencia)
-  const despLocais = useDespesasLocais()
-  const comissoes  = useComissoes()
+  // Fluxo de caixa do mês atual + mês anterior (para cobrir semana passada que pode ser do mês passado)
+  const fluxoMesAtual  = useFluxoCaixa({ mes: now.getMonth() + 1, ano: now.getFullYear() })
+  const fluxoMesAnt    = useFluxoCaixa({ mes: now.getMonth() === 0 ? 12 : now.getMonth(), ano: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear() })
   const navigate   = useNavigate()
 
   const [markingId, setMarkingId]             = useState(null)
   const [expandAtrasados, setExpandAtrasados] = useState(true)
-  const [expandAlertCard, setExpandAlertCard] = useState(null) // 'hoje'|'proximos'|'atrasados'|'maiores'
+  const [expandAlertCard, setExpandAlertCard] = useState(null)
   const [expandFinanceiro, setExpandFinanceiro]   = useState(true)
   const [tabFinanceiro, setTabFinanceiro]         = useState('mensal')
+  const [expandMetricaMensal, setExpandMetricaMensal] = useState(null) // 'recebida'|'areceber'|'despesas'
 
   const op = operacao.data
   const cx = caixa.data
   const fd = fech.data
 
-  const refetchAll = () => { kpis.refetch(); operacao.refetch(); caixa.refetch(); fech.refetch(); despLocais.refetch(); comissoes.refetch() }
+  const refetchAll = () => { kpis.refetch(); operacao.refetch(); caixa.refetch(); fech.refetch(); fluxoMesAtual.refetch(); fluxoMesAnt.refetch() }
 
   const marcarPago = async (cliente) => {
     const valor = parseFloat(cliente.valor_mensal || cliente.valor_previsto || cliente.valor || 0)
@@ -165,26 +167,45 @@ export default function Dashboard() {
   const totalPrometeram    = prometeram.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
   const totalSemCobrar     = semCobrarArr.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
 
-  // ── Saídas (despesas pagas): usa atualizado_em como data de pagamento ────
+  // ── Despesas pagas: usa os mesmos lançamentos do Fluxo de Caixa ───────────────
+  const mapDespesa = (d) => ({
+    id:            d.id,
+    nome:          d.descricao || d.cliente || 'Despesa',
+    categoria:     d.categoria || '',
+    valor:         parseFloat(String(parseFloat(d.valor_realizado) > 0 ? d.valor_realizado : d.valor_previsto || 0)),
+    // Usa data_pagamento; se for o dia 01 (placeholder do fechamento) ou nula, tenta data_vencimento
+    data_pagamento: (() => {
+      const dp = d.data_pagamento
+      if (dp && dp !== '' && !dp.endsWith('-01')) return dp
+      return d.data_vencimento || d.data_competencia || null
+    })(),
+  })
+
   const todasDespesas = useMemo(() => {
-    const locais     = (despLocais.data?.despesas ?? []).filter(d => d.status === 'pago')
-    const coms       = (comissoes.data?.comissoes ?? []).filter(c => c.status === 'pago')
-    const fechDesp   = (fd?.fechamento?.despesas_previstas ?? [])
-      .filter(d => d.status === 'pago')
-      .map(d => ({ ...d, nome: d.descricao || d.nome || 'Despesa', categoria: d.categoria || 'Fechamento' }))
-    return [...locais, ...coms, ...fechDesp]
-  }, [despLocais.data, comissoes.data, fd])
+    const lancAtual = fluxoMesAtual.data?.lancamentos ?? []
+    const lancAnt   = fluxoMesAnt.data?.lancamentos ?? []
+    return [...lancAtual, ...lancAnt]
+      .filter(d => d.tipo === 'saida' && (d.status === 'pago' || parseFloat(d.valor_realizado) > 0))
+      .map(mapDespesa)
+  }, [fluxoMesAtual.data, fluxoMesAnt.data])
+
+  // Despesas pagas no mês atual (para a aba Mensal)
+  const despesasMes = useMemo(() =>
+    (fluxoMesAtual.data?.lancamentos ?? [])
+      .filter(d => d.tipo === 'saida' && (d.status === 'pago' || parseFloat(d.valor_realizado) > 0))
+      .map(mapDespesa)
+  , [fluxoMesAtual.data])
 
   const saidasEssaSemana = useMemo(() =>
     todasDespesas.filter(d => {
-      const dt = parseDate(d.atualizado_em || d.data_pagamento)
+      const dt = parseDate(d.data_pagamento)
       return !isNaN(dt.getTime()) && dt >= inicioSemana
     })
   , [todasDespesas, inicioSemana])
 
   const saidasSemanaPasada = useMemo(() =>
     todasDespesas.filter(d => {
-      const dt = parseDate(d.atualizado_em || d.data_pagamento)
+      const dt = parseDate(d.data_pagamento)
       return !isNaN(dt.getTime()) && dt >= inicioSemanaPasada && dt < inicioSemana
     })
   , [todasDespesas, inicioSemana, inicioSemanaPasada])
@@ -432,6 +453,38 @@ export default function Dashboard() {
               </div>
             </div>
 
+            {/* Todas as despesas pagas do mês (inclui as sem data específica de semana) */}
+            {despesasMes.length > 0 && (
+              <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Todas as despesas pagas em {mesRef}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {despesasMes.map((d, i) => (
+                    <div key={d.id || i} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.04)', border: '1px solid rgba(239,68,68,0.08)' }}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <TrendingDown size={10} className="text-red-500 flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-white truncate">{d.nome}</p>
+                          <p className="text-[10px] text-gray-600">
+                            {d.categoria && <span>{d.categoria}</span>}
+                            {d.data_pagamento && (
+                              <span> · {new Date(d.data_pagamento.length === 10 ? d.data_pagamento + 'T12:00:00' : d.data_pagamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs font-bold ml-2 whitespace-nowrap text-red-400">{formatCurrency(d.valor)}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <span className="text-[10px] text-gray-600">Total pago em {mesRef}</span>
+                  <span className="text-xs font-bold text-red-400">{formatCurrency(despesasMes.reduce((s, d) => s + d.valor, 0))}</span>
+                </div>
+              </div>
+            )}
+
             {/* Pipeline de cobrança (rodapé) */}
             {(cobradosPendentes.length > 0 || prometeram.length > 0 || semCobrarArr.length > 0) && (
               <div className="px-4 pb-4 pt-2 border-t space-y-1.5" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
@@ -470,36 +523,153 @@ export default function Dashboard() {
 
         {/* Aba Mensal */}
         {expandFinanceiro && tabFinanceiro === 'mensal' && (
-          <div className="border-t p-4 space-y-4" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            {/* Grid de métricas clicáveis */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
               {[
-                { label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,                                          icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
-                { label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',                                      icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
-                { label: 'A Receber',        value: aReceber,          color: '#F59E0B',                                      icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto${atrasados.length > 0 ? ` (${atrasados.length} em atraso)` : ''}` },
-                { label: 'Despesas',         value: totalDespesas,     color: '#EF4444',                                      icon: DollarSign,   sub: 'previsto + confirmado' },
-                { label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444',        icon: Activity,     sub: 'receita prevista − despesas' },
-              ].map(({ label, value, color, icon: Icon, sub }) => (
-                <div key={label} className="rounded-xl p-4" style={{ background: '#272C30', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs text-gray-400 font-medium uppercase tracking-wider leading-tight">{label}</p>
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
-                      <Icon size={13} style={{ color }} />
+                { key: 'recebida', label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,       icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
+                { key: 'prevista', label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',    icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
+                { key: 'areceber', label: 'A Receber',        value: aReceber,          color: '#F59E0B',    icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto` },
+                { key: 'despesas', label: 'Despesas Pagas',   value: despesasMes.reduce((s, d) => s + d.valor, 0), color: '#EF4444', icon: DollarSign, sub: `${despesasMes.length} lançamentos pagos` },
+                { key: 'lucro',    label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444', icon: Activity, sub: 'receita prevista − despesas' },
+              ].map(({ key, label, value, color, icon: Icon, sub }) => {
+                const isActive = expandMetricaMensal === key
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setExpandMetricaMensal(v => v === key ? null : key)}
+                    className="px-4 py-4 text-left transition hover:bg-white/[0.02]"
+                    style={{ background: isActive ? `${color}0d` : '#1A1E21', borderBottom: isActive ? `2px solid ${color}` : '2px solid transparent' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-tight">{label}</p>
+                      <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: `${color}18` }}>
+                        <Icon size={11} style={{ color }} />
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-xl font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
-                  <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
-                </div>
-              ))}
+                    <p className="text-lg font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
+                    <p className="text-[10px] text-gray-500 mt-1">{sub}</p>
+                    {['recebida','areceber','despesas'].includes(key) && (
+                      <p className="text-[10px] mt-1" style={{ color: isActive ? color : '#4B5563' }}>
+                        {isActive ? '▲ fechar' : '▼ ver detalhes'}
+                      </p>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+            {/* Painel expandido */}
+            {expandMetricaMensal === 'recebida' && (
+              <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Clientes que pagaram em {mesRef}
+                </p>
+                <div className="space-y-1.5">
+                  {pagosArr.length === 0 ? (
+                    <p className="text-xs text-gray-600 italic">Nenhum pagamento registrado ainda.</p>
+                  ) : pagosArr.map(c => {
+                    const v = parseFloat(c.valor_recebido || c.valor_mensal || c.valor_previsto || c.valor || 0)
+                    return (
+                      <div key={c.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: `${GREEN}08`, border: `1px solid ${GREEN}15` }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <CheckCircle size={11} style={{ color: GREEN, flexShrink: 0 }} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-white truncate">{c.nome}</p>
+                            {c.data_pagamento && <p className="text-[10px] text-gray-500">{new Date(c.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</p>}
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold ml-3 whitespace-nowrap" style={{ color: GREEN }}>{formatCurrency(v)}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <span className="text-[10px] text-gray-600">Total recebido</span>
+                  <span className="text-xs font-bold" style={{ color: GREEN }}>{formatCurrency(receitaConfirmada)}</span>
+                </div>
+              </div>
+            )}
+
+            {expandMetricaMensal === 'areceber' && (
+              <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Pendentes de pagamento em {mesRef}
+                </p>
+                <div className="space-y-1.5">
+                  {[...pendentesMes, ...atrasados].length === 0 ? (
+                    <p className="text-xs text-gray-600 italic">Nenhum pendente! 🎉</p>
+                  ) : [...pendentesMes, ...atrasados].map(c => {
+                    const v = parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0)
+                    const isAtrasado = c.origem === 'atraso' || c.status_pagamento === 'atrasado' || c.status_pagamento === 'vencido'
+                    return (
+                      <div key={c.id} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: isAtrasado ? 'rgba(239,68,68,0.05)' : 'rgba(245,158,11,0.05)', border: isAtrasado ? '1px solid rgba(239,68,68,0.15)' : '1px solid rgba(245,158,11,0.15)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: isAtrasado ? '#EF4444' : '#F59E0B' }} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-white truncate">{c.nome}</p>
+                            <p className="text-[10px] text-gray-500">
+                              {isAtrasado ? 'Em atraso' : c.dia_pagamento ? `Venc. dia ${c.dia_pagamento}` : 'Pendente'}
+                              {c.cobranca_status === 'cobrado' && ' · Cobrado'}
+                              {c.cobranca_status === 'prometeu_pagamento' && ' · Prometeu pagar'}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold ml-3 whitespace-nowrap" style={{ color: isAtrasado ? '#EF4444' : '#F59E0B' }}>{formatCurrency(v)}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <span className="text-[10px] text-gray-600">Total a receber</span>
+                  <span className="text-xs font-bold text-yellow-400">{formatCurrency(aReceber)}</span>
+                </div>
+              </div>
+            )}
+
+            {expandMetricaMensal === 'despesas' && (
+              <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Despesas pagas em {mesRef}
+                </p>
+                {despesasMes.length === 0 ? (
+                  <p className="text-xs text-gray-600 italic">Nenhuma despesa paga registrada.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {despesasMes.map((d, i) => (
+                      <div key={d.id || i} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.12)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <TrendingDown size={10} className="text-red-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-white truncate">{d.nome}</p>
+                            <p className="text-[10px] text-gray-600">
+                              {d.categoria && <span>{d.categoria}</span>}
+                              {d.data_pagamento && (
+                                <span> · {new Date(d.data_pagamento.length === 10 ? d.data_pagamento + 'T12:00:00' : d.data_pagamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold ml-2 whitespace-nowrap text-red-400">{formatCurrency(d.valor)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <span className="text-[10px] text-gray-600">Total pago</span>
+                  <span className="text-xs font-bold text-red-400">{formatCurrency(despesasMes.reduce((s, d) => s + d.valor, 0))}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Indicadores rápidos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px border-t" style={{ background: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.05)' }}>
               {[
-                { label: 'Caixa Atual',      value: formatCurrency(caixaAtual),                                  color: GREEN,      sub: null },
-                { label: 'Clientes Pagos',   value: `${pctPagos}%`,                                              color: GREEN,      sub: `${pagosArr.length} de ${totalClientes}` },
-                { label: 'Total Pendente',   value: formatCurrency(aReceber),                                    color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
-                { label: 'Saúde Financeira', value: saudeNivel,                                                   color: saudeColor, sub: lucroProjetado >= 0 ? 'lucro positivo' : 'despesas > receita' },
+                { label: 'Caixa Atual',      value: formatCurrency(caixaAtual),  color: GREEN,      sub: null },
+                { label: 'Clientes Pagos',   value: `${pctPagos}%`,              color: GREEN,      sub: `${pagosArr.length} de ${totalClientes}` },
+                { label: 'Total Pendente',   value: formatCurrency(aReceber),    color: '#F59E0B',  sub: `${pendentesMes.length + atrasados.length} clientes` },
+                { label: 'Saúde Financeira', value: saudeNivel,                   color: saudeColor, sub: lucroProjetado >= 0 ? 'lucro positivo' : 'despesas > receita' },
               ].map(({ label, value, color, sub }) => (
-                <div key={label} className="rounded-xl px-4 py-3"
-                     style={{ background: '#272C30', border: `1px solid ${color}22` }}>
+                <div key={label} className="px-4 py-3" style={{ background: '#1A1E21' }}>
                   <p className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</p>
                   <p className="text-sm font-bold mt-1" style={{ color }}>{value}</p>
                   {sub && <p className="text-[10px] text-gray-600 mt-0.5">{sub}</p>}
