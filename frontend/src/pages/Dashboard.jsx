@@ -224,6 +224,30 @@ export default function Dashboard() {
       .map(mapDespesa)
   , [fluxoMesAtual.data])
 
+  // Despesas a pagar (previsto, não pagas ainda) do mês atual
+  const despesasAPagarMes = useMemo(() =>
+    (fluxoMesAtual.data?.lancamentos ?? [])
+      .filter(d => d.tipo === 'saida' && d.status !== 'pago' && parseFloat(d.valor_realizado || 0) === 0)
+      .map(d => ({
+        id:              d.id,
+        nome:            d.descricao || d.cliente || 'Despesa',
+        categoria:       d.categoria || '',
+        valor:           parseFloat(d.valor_previsto || 0),
+        data_vencimento: d.data_vencimento || (d.data_competencia && !d.data_competencia.endsWith('-01') ? d.data_competencia : null),
+      }))
+  , [fluxoMesAtual.data])
+
+  const despesasAPagarEssaSemana = useMemo(() =>
+    despesasAPagarMes.filter(d => {
+      if (!d.data_vencimento) return false
+      const dt = parseDate(d.data_vencimento)
+      return !isNaN(dt.getTime()) && dt >= inicioSemana && dt <= fimSemana
+    })
+  , [despesasAPagarMes, inicioSemana, fimSemana])
+
+  const totalDespesasAPagarMes        = despesasAPagarMes.reduce((s, d) => s + d.valor, 0)
+  const totalDespesasAPagarEssaSemana = despesasAPagarEssaSemana.reduce((s, d) => s + d.valor, 0)
+
   const saidasEssaSemana = useMemo(() =>
     todasDespesas.filter(d => {
       const dt = parseDate(d.data_pagamento)
@@ -424,6 +448,35 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* Despesas a pagar esta semana */}
+                {despesasAPagarEssaSemana.length > 0 && (
+                  <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                        <TrendingDown size={10} className="text-orange-400" /> Despesas a Pagar
+                      </p>
+                      <p className="text-[11px] font-bold text-orange-400">{formatCurrency(totalDespesasAPagarEssaSemana)}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {despesasAPagarEssaSemana.map((d, i) => (
+                        <div key={d.id || i} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(249,115,22,0.05)', border: '1px solid rgba(249,115,22,0.15)' }}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-white truncate">{d.nome}</p>
+                              <p className="text-[10px] text-orange-600">
+                                {d.categoria && <span>{d.categoria}</span>}
+                                {d.data_vencimento && <span>{d.categoria ? ' · ' : ''}venc. {new Date(d.data_vencimento.length === 10 ? d.data_vencimento + 'T12:00:00' : d.data_vencimento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold ml-3 whitespace-nowrap text-orange-400">{formatCurrency(d.valor)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Despesas pagas esta semana */}
                 <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <div className="flex items-center justify-between mb-2">
@@ -567,12 +620,13 @@ export default function Dashboard() {
         {expandFinanceiro && tabFinanceiro === 'mensal' && (
           <div className="border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
             {/* Grid de métricas clicáveis */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px" style={{ background: 'rgba(255,255,255,0.04)' }}>
               {[
                 { key: 'recebida', label: 'Receita Recebida', value: receitaConfirmada, color: GREEN,       icon: CheckCircle,  sub: `${pagosArr.length} clientes pagaram` },
                 { key: 'prevista', label: 'Receita Prevista', value: receitaPrevista,   color: '#6366F1',    icon: TrendingUp,   sub: `total esperado em ${mesRef}` },
                 { key: 'areceber', label: 'A Receber',        value: aReceber,          color: '#F59E0B',    icon: Clock,        sub: `${pendentesMes.length + atrasados.length} em aberto` },
                 { key: 'despesas', label: 'Despesas Pagas',   value: despesasMes.reduce((s, d) => s + d.valor, 0), color: '#EF4444', icon: DollarSign, sub: `${despesasMes.length} lançamentos pagos` },
+                { key: 'apagar',   label: 'Despesas a Pagar', value: totalDespesasAPagarMes, color: '#F97316', icon: TrendingDown, sub: `${despesasAPagarMes.length} pendentes` },
                 { key: 'lucro',    label: 'Lucro Projetado',  value: lucroProjetado,    color: lucroProjetado >= 0 ? GREEN : '#EF4444', icon: Activity, sub: 'receita prevista − despesas' },
               ].map(({ key, label, value, color, icon: Icon, sub }) => {
                 const isActive = expandMetricaMensal === key
@@ -590,7 +644,7 @@ export default function Dashboard() {
                     </div>
                     <p className="text-lg font-black" style={{ color: value < 0 ? '#EF4444' : color }}>{formatCurrency(value)}</p>
                     <p className="text-[10px] text-gray-500 mt-1">{sub}</p>
-                    {['recebida','areceber','despesas'].includes(key) && (
+                    {['recebida','areceber','despesas','apagar'].includes(key) && (
                       <p className="text-[10px] mt-1" style={{ color: isActive ? color : '#4B5563' }}>
                         {isActive ? '▲ fechar' : '▼ ver detalhes'}
                       </p>
@@ -664,6 +718,41 @@ export default function Dashboard() {
                 <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
                   <span className="text-[10px] text-gray-600">Total a receber</span>
                   <span className="text-xs font-bold text-yellow-400">{formatCurrency(aReceber)}</span>
+                </div>
+              </div>
+            )}
+
+            {expandMetricaMensal === 'apagar' && (
+              <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-3">
+                  Despesas a pagar em {mesRef}
+                </p>
+                {despesasAPagarMes.length === 0 ? (
+                  <p className="text-xs text-gray-600 italic">Nenhuma despesa pendente! ✓</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {despesasAPagarMes.map((d, i) => (
+                      <div key={d.id || i} className="flex items-center justify-between py-1.5 px-3 rounded-lg" style={{ background: 'rgba(249,115,22,0.05)', border: '1px solid rgba(249,115,22,0.12)' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <TrendingDown size={10} className="text-orange-400 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-white truncate">{d.nome}</p>
+                            <p className="text-[10px] text-gray-600">
+                              {d.categoria && <span>{d.categoria}</span>}
+                              {d.data_vencimento && (
+                                <span>{d.categoria ? ' · ' : ''}venc. {new Date(d.data_vencimento.length === 10 ? d.data_vencimento + 'T12:00:00' : d.data_vencimento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs font-bold ml-2 whitespace-nowrap text-orange-400">{formatCurrency(d.valor)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-between mt-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <span className="text-[10px] text-gray-600">Total a pagar</span>
+                  <span className="text-xs font-bold text-orange-400">{formatCurrency(totalDespesasAPagarMes)}</span>
                 </div>
               </div>
             )}
