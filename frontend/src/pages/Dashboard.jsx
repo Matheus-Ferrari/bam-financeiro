@@ -167,6 +167,34 @@ export default function Dashboard() {
   const totalPrometeram    = prometeram.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
   const totalSemCobrar     = semCobrarArr.reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
 
+  // Fim da semana atual (domingo)
+  const fimSemana = useMemo(() => new Date(inicioSemana.getTime() + 7 * 86400000 - 1), [inicioSemana])
+
+  // Pendentes com vencimento nessa semana (dia_pagamento cai entre seg e dom desta semana)
+  const aReceberEssaSemana = useMemo(() => {
+    const diaIni = inicioSemana.getDate()
+    const diaFim = fimSemana.getDate()
+    const mesIni = inicioSemana.getMonth()
+    const mesFim = fimSemana.getMonth()
+    return pendentesMes.filter(c => {
+      const dia = c.dia_pagamento
+      if (!dia) return false
+      if (mesIni === mesFim) return dia >= diaIni && dia <= diaFim
+      // Semana cruza virada de mês
+      return dia >= diaIni || dia <= diaFim
+    })
+  }, [pendentesMes, inicioSemana, fimSemana])
+
+  // Atrasados que foram cobrados / prometeram pagar (podem entrar essa semana)
+  const atrasadosAtivosEssaSemana = useMemo(() =>
+    atrasados.filter(c => c.cobranca_status === 'cobrado' || c.cobranca_status === 'prometeu_pagamento')
+  , [atrasados])
+
+  const totalAReceberEssaSemana = useMemo(() =>
+    [...aReceberEssaSemana, ...atrasadosAtivosEssaSemana]
+      .reduce((s, c) => s + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0), 0)
+  , [aReceberEssaSemana, atrasadosAtivosEssaSemana])
+
   // ── Despesas pagas: usa os mesmos lançamentos do Fluxo de Caixa ───────────────
   const mapDespesa = (d) => ({
     id:            d.id,
@@ -349,6 +377,52 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+
+                {/* A Receber esta semana */}
+                {(aReceberEssaSemana.length > 0 || atrasadosAtivosEssaSemana.length > 0) && (
+                  <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold flex items-center gap-1">
+                        <Clock size={10} className="text-amber-400" /> A Receber
+                      </p>
+                      <p className="text-[11px] font-bold text-amber-400">{formatCurrency(totalAReceberEssaSemana)}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      {aReceberEssaSemana.map(c => {
+                        const v = parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0)
+                        const label = c.cobranca_status === 'cobrado' ? 'cobrado' : c.cobranca_status === 'prometeu_pagamento' ? 'prometeu' : c.dia_pagamento ? `dia ${c.dia_pagamento}` : ''
+                        return (
+                          <div key={c.id} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.04)' }}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-white truncate">{c.nome}</p>
+                                {label && <p className="text-[10px] text-amber-600">{label}</p>}
+                              </div>
+                            </div>
+                            <p className="text-xs font-bold ml-3 whitespace-nowrap text-amber-400">{formatCurrency(v)}</p>
+                          </div>
+                        )
+                      })}
+                      {atrasadosAtivosEssaSemana.map(c => {
+                        const v = parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0)
+                        const label = c.cobranca_status === 'prometeu_pagamento' ? 'prometeu pagar' : 'cobrado · em atraso'
+                        return (
+                          <div key={c.id} className="flex items-center justify-between py-1 px-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)' }}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-amber-200 truncate">{c.nome}</p>
+                                <p className="text-[10px] text-amber-600">{label}</p>
+                              </div>
+                            </div>
+                            <p className="text-xs font-bold ml-3 whitespace-nowrap text-amber-400">{formatCurrency(v)}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Despesas pagas esta semana */}
                 <div className="pt-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
