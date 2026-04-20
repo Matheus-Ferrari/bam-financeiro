@@ -212,21 +212,23 @@ export default function Dashboard() {
     const lancAtual = fluxoMesAtual.data?.lancamentos ?? []
     const lancAnt   = fluxoMesAnt.data?.lancamentos ?? []
     return [...lancAtual, ...lancAnt]
-      .filter(d => d.tipo === 'saida' && (d.status === 'pago' || parseFloat(d.valor_realizado) > 0))
+      .filter(d => d.tipo === 'saida' && d.status === 'pago' && d.origem !== 'cartao')
       .map(mapDespesa)
   }, [fluxoMesAtual.data, fluxoMesAnt.data])
 
   // Despesas pagas no mês atual (para a aba Mensal)
+  // Exclui itens de cartão: eles impactam caixa apenas via pagamento de fatura (lancamento separado)
   const despesasMes = useMemo(() =>
     (fluxoMesAtual.data?.lancamentos ?? [])
-      .filter(d => d.tipo === 'saida' && (d.status === 'pago' || parseFloat(d.valor_realizado) > 0))
+      .filter(d => d.tipo === 'saida' && d.status === 'pago' && d.origem !== 'cartao')
       .map(mapDespesa)
   , [fluxoMesAtual.data])
 
   // Despesas a pagar (previsto, não pagas ainda) do mês atual
+  // Exclui itens de cartão: não são saídas imediatas (serão pagas via fatura)
   const despesasAPagarMes = useMemo(() =>
     (fluxoMesAtual.data?.lancamentos ?? [])
-      .filter(d => d.tipo === 'saida' && d.status !== 'pago' && parseFloat(d.valor_realizado || 0) === 0)
+      .filter(d => d.tipo === 'saida' && d.status !== 'pago' && d.origem !== 'cartao')
       .map(d => ({
         id:              d.id,
         nome:            d.descricao || d.cliente || 'Despesa',
