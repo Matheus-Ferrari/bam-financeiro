@@ -490,7 +490,7 @@ function TabFluxo() {
       {/* ── Tabela principal ── */}
       <Card
         title="Lançamentos"
-        subtitle={`${colFilteredData.length} lançamentos · ✎ editar inline · 🗑 excluir manuais`}
+        subtitle={`${colFilteredData.length} lançamentos · ✎ editar inline · 🗑 excluir manuais e despesas do fechamento`}
         action={
           <button
             onClick={() => { setCreateForm(FORM_EMPTY); setCreateErr(""); setCreateOpen(true) }}
@@ -761,7 +761,7 @@ function TabFluxo() {
                                 â†º
                               </button>
                             )}
-                            {l.fonte === "manual" && (
+                            {(l.fonte === "manual" || l.fonte === "fechamento") && (
                               <button
                                 disabled={deletingId === l.id}
                                 onClick={() => setConfirmDel(l)}
