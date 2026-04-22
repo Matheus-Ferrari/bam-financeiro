@@ -213,10 +213,17 @@ export default function Dashboard() {
   , [fluxoMesAtual.data])
 
   // Despesas a pagar (previsto, não pagas ainda) do mês atual
-  // Exclui itens de cartão: não são saídas imediatas (serão pagas via fatura)
-  const despesasAPagarMes = useMemo(() =>
-    (fluxoMesAtual.data?.lancamentos ?? [])
-      .filter(d => d.tipo === 'saida' && d.status !== 'pago' && d.origem !== 'cartao')
+  // Cenário A: se já existe um lançamento de "pagamento fatura cartão" consolidado,
+  //            ele representa todos os gastos do cartão — exclui itens individuais para não duplicar.
+  // Cenário B: sem fatura consolidada, itens de cartão entram individualmente como obrigação real.
+  const despesasAPagarMes = useMemo(() => {
+    const pendentes = (fluxoMesAtual.data?.lancamentos ?? [])
+      .filter(d => d.tipo === 'saida' && d.status !== 'pago')
+    const temFaturaConsolidada = pendentes.some(d =>
+      /fatura.*cart|pagamento.*cart|cart.*fatura/i.test(d.descricao || '')
+    )
+    return pendentes
+      .filter(d => !(temFaturaConsolidada && d.origem === 'cartao'))
       .map(d => ({
         id:              d.id,
         nome:            d.descricao || d.cliente || 'Despesa',
@@ -224,7 +231,7 @@ export default function Dashboard() {
         valor:           parseFloat(d.valor_previsto || 0),
         data_vencimento: d.data_vencimento || (d.data_competencia && !d.data_competencia.endsWith('-01') ? d.data_competencia : null),
       }))
-  , [fluxoMesAtual.data])
+  }, [fluxoMesAtual.data])
 
   const despesasAPagarEssaSemana = useMemo(() =>
     despesasAPagarMes.filter(d => {
@@ -237,7 +244,7 @@ export default function Dashboard() {
   const totalDespesasAPagarMes        = despesasAPagarMes.reduce((s, d) => s + d.valor, 0)
   const totalDespesasAPagarEssaSemana = despesasAPagarEssaSemana.reduce((s, d) => s + d.valor, 0)
 
-  // Despesas totais do mês (pagas + a pagar), excluindo cartão
+  // Despesas totais do mês: pagas em caixa + obrigações pendentes (inclui cartão)
   const totalDespesasMes = despesasMes.reduce((s, d) => s + d.valor, 0) + totalDespesasAPagarMes
   // Lucro projetado: receita total prevista − total despesas diretas do mês
   const lucroProjetado   = receitaPrevista - totalDespesasMes
