@@ -192,7 +192,9 @@ export class FluxoCaixaService {
         valor_realizado: round2(isPago ? valor : 0),
         status: isPago ? "pago" : "previsto",
         recorrente: false,
-        origem: origemDespesa(String(item.categoria || "")),
+        // Preserva 'origem' explícita do item (ex: 'cartao') caso definida; senão infere pela categoria
+        // Também respeita o flag 'cartao: true' salvo pelo frontend
+        origem: item.cartao ? "cartao" : (String(item.origem || "") || origemDespesa(String(item.categoria || ""))),
         forma_pagamento: "",
         conta_financeira: "conta_principal",
         conciliado: false,
@@ -500,6 +502,37 @@ export class FluxoCaixaService {
   }
 
   async deleteManual(id: string): Promise<Record<string, unknown>> {
+    // Handle fechamento-based entries: fech_{competencia}_{1-based-index}
+    if (id.startsWith("fech_")) {
+      // ID format: fech_2026-04_15
+      const withoutPrefix = id.slice(5); // "2026-04_15"
+      const lastUnderscore = withoutPrefix.lastIndexOf("_");
+      if (lastUnderscore === -1) throw new Error("ID de fechamento inválido: " + id);
+      const competencia = withoutPrefix.slice(0, lastUnderscore); // "2026-04"
+      const oneBasedIdx = parseInt(withoutPrefix.slice(lastUnderscore + 1), 10);
+      if (isNaN(oneBasedIdx) || oneBasedIdx < 1) throw new Error("Índice inválido no ID: " + id);
+      const zeroIdx = oneBasedIdx - 1;
+
+      const all = await fechamentoStorage.all();
+      const fech = all.find((f) => String(f.competencia || "").startsWith(competencia));
+      if (!fech) throw new Error("Fechamento não encontrado para competência: " + competencia);
+
+      const despPrev = ((fech.despesas_previstas as Record<string, unknown>[]) || []);
+      const novosGastos = ((fech.novos_gastos as Record<string, unknown>[]) || []);
+
+      if (zeroIdx < despPrev.length) {
+        // Item is in despesas_previstas
+        const newDespPrev = despPrev.filter((_, i) => i !== zeroIdx);
+        await fechamentoStorage.update(String(fech.id), { despesas_previstas: newDespPrev });
+      } else {
+        // Item is in novos_gastos
+        const novosIdx = zeroIdx - despPrev.length;
+        const newNovos = novosGastos.filter((_, i) => i !== novosIdx);
+        await fechamentoStorage.update(String(fech.id), { novos_gastos: newNovos });
+      }
+      return { ok: true, id };
+    }
+
     // buildManuais prefixes ids with "mov_"; strip it to get the real Firestore doc id
     const rawId = id.startsWith("mov_") ? id.slice(4) : id;
     const movs = await movimentacoesStorage.all();

@@ -259,6 +259,8 @@ export default function FechamentoMes() {
   /* ── Cálculos locais (recalcula ao editar itens) ─────────────── */
   const totalDespConfirmadas = despesas.filter(d => d.status === 'confirmado' || d.status === 'pago').reduce((s, d) => s + (parseFloat(d.valor) || 0), 0)
   const totalDespPrevistas   = despesas.filter(d => d.status === 'previsto').reduce((s, d) => s + (parseFloat(d.valor) || 0), 0)
+  // Itens marcados como cartão: entram na fatura, não saem do caixa este mês
+  const totalDespCartao      = despesas.filter(d => d.cartao).reduce((s, d) => s + (parseFloat(d.valor) || 0), 0)
   const totalReducoes        = reducoes.reduce((s, r) => s + (parseFloat(r.valor) || 0), 0)
   const totalNovos           = novos.reduce((s, g) => s + (parseFloat(g.valor) || 0), 0)
   const totalComissoes       = comissoesMes.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0)
@@ -306,9 +308,10 @@ export default function FechamentoMes() {
         entradasPorDia[dia] = (entradasPorDia[dia] || 0) + parseFloat(c.valor_mensal || c.valor_previsto || c.valor || 0)
       }
     }
-    // Saídas futuras: despesas com vencimento, excluindo já pagas/adiadas
+    // Saídas futuras: despesas com vencimento, excluindo já pagas/adiadas e itens de cartão
+    // Itens de cartão não saem do caixa este mês — serão cobertos pela fatura no mês seguinte
     for (const d of despesas) {
-      if (d.vencimento && d.status !== 'pago' && d.status !== 'adiado') {
+      if (d.vencimento && d.status !== 'pago' && d.status !== 'adiado' && !d.cartao) {
         const diaPart = d.vencimento.split('-')[2]
         saidasPorDia[diaPart] = (saidasPorDia[diaPart] || 0) + parseFloat(d.valor || 0)
       }
@@ -331,7 +334,8 @@ export default function FechamentoMes() {
   }, [saldoConta, competencia, clientesPendLocal, despesas, novos, totalComissoes, totalReducoes])
 
   // Caixa real — derivado do fluxo diário quando disponível
-  const saidasRestantes    = totalDespConfirmadas + totalDespPrevistas + totalNovos + totalComissoes
+  // saidasRestantes exclui itens de cartão (não saem do caixa este mês — pagos via fatura no mês seguinte)
+  const saidasRestantes    = totalDespConfirmadas + (totalDespPrevistas - totalDespCartao) + totalNovos + totalComissoes
   const entradasRestantes  = recPendente
   const saldoFinalFluxo    = fluxoDiario.length > 0 ? fluxoDiario[fluxoDiario.length - 1].saldo : null
   const saldoFinalPrevisto = saldoConta > 0
@@ -413,7 +417,9 @@ export default function FechamentoMes() {
   const totalDespLocaisPendMes = despFixasMesPendente
   const despProxMesFonteParcial = despLocaisDoMes.length === 0 && (dataDespLocais?.despesas ?? []).length > 0
 
-  // Lucro Real = saldo final projetado - cartão - despesas fixas ainda não pagas
+  // Lucro Real = saldo final projetado (sem cartão) - fatura do cartão - despesas fixas pendentes
+  // saldoFinalPrevisto já exclui itens de cartão do fluxo (via fluxoDiario e saidasRestantes)
+  // Portanto faturaCartao é subtraída uma única vez aqui — sem dupla contagem
   const lucroReal = saldoFinalPrevisto - faturaCartao - totalDespLocaisPendMes
 
   // Projeção Próximo Mês — usa TUDO do fechamento + fixas + cartão (sem dupla contagem)
@@ -423,8 +429,9 @@ export default function FechamentoMes() {
   // Só somamos as fixas se o total fechamento não as incluir (usuário decide na entrada de dados)
   // Exibimos os dois valores separados para transparência
   const receitaProxMes   = recConfirmada + recPendente
-  const despesaProxMes   = despFechamentoMes  // base = o que está no fechamento
-  const despesaComFixas  = despesaProxMes + despFixasMesTotal + faturaCartao  // tudo junto
+  // Exclui itens de cartão do base do fechamento (já contabilizados via faturaCartao)
+  const despesaProxMes   = despFechamentoMes - totalDespCartao
+  const despesaComFixas  = despesaProxMes + despFixasMesTotal + faturaCartao  // tudo junto, sem dupla contagem
   const resultadoProxMes = receitaProxMes - despesaComFixas
 
   /* ── Salvar ──────────────────────────────────────────────────── */
@@ -1387,7 +1394,7 @@ export default function FechamentoMes() {
                   <thead><tr style={{ background: 'rgba(0,0,0,0.3)' }}>
                     {(hubMostrarTodos
                       ? ['Mês','Descrição','Categoria','Centro de Custo','Valor','Status']
-                      : ['Descrição','Categoria','Vencimento','Valor','Status','Obs.','']
+                      : ['Descrição','Categoria','Vencimento','Valor','Status','Obs.','Cartão','']
                     ).map(h => (
                       <th key={h} className="px-3 py-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
                     ))}
@@ -1451,6 +1458,15 @@ export default function FechamentoMes() {
                             <td className="px-2 py-1"><input className={CI} value={hubDespEditRow.observacao || ''} onChange={e => setHubDespEditRow(r => ({ ...r, observacao: e.target.value }))} /></td>
                           ) : (
                             <td className="px-3 py-2.5 text-xs text-gray-500">{d.observacao || '—'}</td>
+                          ))}
+                          {!hubMostrarTodos && (isEdit ? (
+                            <td className="px-2 py-1 text-center">
+                              <input type="checkbox" title="Pago via cartão (entra na fatura)" checked={!!hubDespEditRow.cartao} onChange={e => setHubDespEditRow(r => ({ ...r, cartao: e.target.checked }))} className="w-3.5 h-3.5 accent-[#12F0C6] cursor-pointer" />
+                            </td>
+                          ) : (
+                            <td className="px-3 py-2.5 text-center">
+                              {d.cartao ? <span title="Pago via cartão" style={{ color: '#818CF8', fontSize: 13 }}>💳</span> : <span className="text-gray-700 text-xs">—</span>}
+                            </td>
                           ))}
                           {!hubMostrarTodos && (
                             <td className="px-2 py-1.5 text-right whitespace-nowrap">
