@@ -224,8 +224,11 @@ function BulkActionBar({ count, totalVisible, onSelectAll, onClear, onConciliar,
 
 // ── Linha da tabela ───────────────────────────────────────────────────────
 
-function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError }) {
+function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved }) {
   const [open, setOpen] = useState(false)
+  const [editando, setEditando] = useState(false)
+  const [editForm, setEditForm] = useState({ valor: '', descricao: '', obs: '' })
+  const [editSaving, setEditSaving] = useState(false)
   const { csvItem, match, divergencia } = resultado
 
   const valorInt  = match ? (match.amount ?? 0) : null
@@ -236,6 +239,24 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
   const isIgnorado   = effStatus === 'ignorado'
   const isAjuste     = effStatus === 'ajuste'
   const isActed      = isConciliado || isIgnorado || isAjuste
+
+  async function salvarEdicaoLinha() {
+    if (!match?.id) return
+    setEditSaving(true)
+    try {
+      const payload = {}
+      if (editForm.valor !== '')     payload.valor_realizado = parseFloat(editForm.valor)
+      if (editForm.descricao !== '')  payload.descricao = editForm.descricao
+      if (editForm.obs !== '')        payload.observacao = editForm.obs
+      await financeiroAPI.updateLancamento(String(match.id), payload)
+      setEditando(false)
+      await onLancamentoSaved?.()
+    } catch (e) {
+      alert('Erro ao salvar: ' + (e?.response?.data?.detail ?? e.message))
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   return (
     <>
@@ -348,10 +369,13 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
               </p>
               <div className="grid grid-cols-3 gap-0 text-[10px]">
                 {[
-                  ['', 'Extrato (CSV)', 'Interno'],
+                  ['',          'Extrato (CSV)',               'Interno'],
                   ['Data',      formatDate(divergencia.dataCsv),     `${formatDate(divergencia.dataInterno)}${divergencia.diffDias > 0 ? ` (${divergencia.diffDias}d)` : ''}`],
                   ['Valor',     formatCurrency(divergencia.valorCsv), `${formatCurrency(divergencia.valorInterno)}${divergencia.diffValor !== 0 ? ` (dif: ${formatCurrency(divergencia.diffValor)})` : ''}`],
                   ['Descrição', divergencia.descricaoCsv,             divergencia.descricaoInt],
+                  ...(divergencia.clienteInt   ? [['Cliente',   '—', divergencia.clienteInt]]   : []),
+                  ...(divergencia.categoriaInt ? [['Categoria', '—', divergencia.categoriaInt]] : []),
+                  ...(divergencia.origemInt    ? [['Origem',    '—', divergencia.origemInt]]    : []),
                 ].map(([campo, csv, interno], i) => (
                   <>
                     <div key={`c${i}`} className={`py-1.5 ${i === 0 ? 'text-gray-600 font-semibold border-b' : 'text-gray-500 border-b'}`}
@@ -369,6 +393,59 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
                   </>
                 ))}
               </div>
+
+              {/* Editar lançamento interno */}
+              {!editando && match?.id && (
+                <button
+                  onClick={() => {
+                    setEditForm({ valor: String(divergencia.valorInterno ?? ''), descricao: divergencia.descricaoInt ?? '', obs: '' })
+                    setEditando(true)
+                  }}
+                  className="mt-2 text-[10px] px-2.5 py-1 rounded border transition-colors hover:bg-blue-500/10"
+                  style={{ borderColor: '#3B82F677', color: '#60A5FA' }}>
+                  ✏ Editar lançamento interno
+                </button>
+              )}
+              {editando && (
+                <div className="mt-3 p-3 rounded border" style={{ borderColor: '#3B82F644', background: '#0B111C' }}>
+                  <p className="text-[11px] font-semibold text-blue-400 mb-2">Editar lançamento interno</p>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500 block mb-1">Valor realizado (R$)</label>
+                      <input type="number" step="0.01"
+                        className="w-full bg-[#141B23] border border-[#334155] rounded px-2 py-1 text-xs text-white"
+                        value={editForm.valor}
+                        onChange={e => setEditForm(f => ({ ...f, valor: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 block mb-1">Descrição</label>
+                      <input type="text"
+                        className="w-full bg-[#141B23] border border-[#334155] rounded px-2 py-1 text-xs text-white"
+                        value={editForm.descricao}
+                        onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <label className="text-[10px] text-gray-500 block mb-1">Observação (opcional)</label>
+                    <input type="text"
+                      className="w-full bg-[#141B23] border border-[#334155] rounded px-2 py-1 text-xs text-white"
+                      value={editForm.obs}
+                      onChange={e => setEditForm(f => ({ ...f, obs: e.target.value }))} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={salvarEdicaoLinha} disabled={editSaving}
+                      className="px-3 py-1 rounded text-[10px] font-medium transition-colors"
+                      style={{ background: editSaving ? '#1E3A5F' : '#1E40AF', color: '#93C5FD' }}>
+                      {editSaving ? 'Salvando…' : 'Salvar'}
+                    </button>
+                    <button onClick={() => setEditando(false)}
+                      className="px-3 py-1 rounded text-[10px] border transition-colors hover:bg-white/5"
+                      style={{ borderColor: '#374151', color: '#6B7280' }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </td>
         </tr>
@@ -411,6 +488,9 @@ export default function Conciliacao() {
 
   // ── Painel divergências ───────────────────────────────────────────────
   const [showDivergencias, setShowDivergencias] = useState(true)
+  const [editandoDiv,   setEditandoDiv]   = useState(null)
+  const [editFormDiv,   setEditFormDiv]   = useState({ valor: '', descricao: '', obs: '' })
+  const [editSavingDiv, setEditSavingDiv] = useState(false)
 
   // ─────────────────────────────────────────────────────────────────────
   // Estado de conciliação
@@ -763,6 +843,24 @@ export default function Conciliacao() {
     }
   }, [applyOverride, executarConciliarFirebase])
 
+  const salvarEdicaoDiv = useCallback(async (match) => {
+    if (!match?.id) return
+    setEditSavingDiv(true)
+    try {
+      const payload = {}
+      if (editFormDiv.valor !== '')     payload.valor_realizado = parseFloat(editFormDiv.valor)
+      if (editFormDiv.descricao !== '')  payload.descricao = editFormDiv.descricao
+      if (editFormDiv.obs !== '')        payload.observacao = editFormDiv.obs
+      await financeiroAPI.updateLancamento(String(match.id), payload)
+      setEditandoDiv(null)
+      await carregarLancamentos()
+    } catch (e) {
+      alert('Erro ao salvar: ' + (e?.response?.data?.detail ?? e.message))
+    } finally {
+      setEditSavingDiv(false)
+    }
+  }, [editFormDiv, carregarLancamentos])
+
   // ── Analisar: recarrega Firebase e reseta estado de sessão ─────────────────
 
   const analisar = useCallback(async () => {
@@ -997,6 +1095,14 @@ export default function Conciliacao() {
                       Conciliar assim
                     </button>
                   </div>
+                  {/* Info do lançamento interno */}
+                  {(r.match?.cliente || r.match?.categoria || r.match?.origem) && (
+                    <div className="flex gap-4 text-[10px] text-gray-500 mb-2 flex-wrap">
+                      {r.match.cliente   && <span><span className="text-gray-600">Cliente: </span>{r.match.cliente}</span>}
+                      {r.match.categoria && <span><span className="text-gray-600">Categoria: </span>{r.match.categoria}</span>}
+                      {r.match.origem    && <span><span className="text-gray-600">Origem: </span>{r.match.origem}</span>}
+                    </div>
+                  )}
                   <div className="text-[10px]">
                     {[
                       ['Data',      formatDate(r.divergencia.dataCsv),       `${formatDate(r.divergencia.dataInterno)}${r.divergencia.diffDias > 0 ? ` (${r.divergencia.diffDias}d)` : ''}`,  r.divergencia.diffDias > 0],
@@ -1179,6 +1285,7 @@ export default function Conciliacao() {
                       onAction={singleAction}
                       isSaving={savingIds.has(r.csvItem.id)}
                       saveError={saveErrors[r.csvItem.id] ?? null}
+                      onLancamentoSaved={carregarLancamentos}
                     />
                   ))
                 )}
