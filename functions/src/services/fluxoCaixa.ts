@@ -165,7 +165,8 @@ export class FluxoCaixaService {
    */
   private buildDespesasFromFechamento(
     fech: Record<string, unknown>,
-    competencia: string
+    competencia: string,
+    cm: Record<string, Record<string, unknown>>
   ): Record<string, unknown>[] {
     const despPrev = (fech.despesas_previstas as Record<string, unknown>[]) || [];
     const novosGastos = (fech.novos_gastos as Record<string, unknown>[]) || [];
@@ -178,8 +179,10 @@ export class FluxoCaixaService {
       const isPago = statusRaw === "pago";
       const valor = toFloat(item.valor);
       const venc = item.vencimento ? String(item.vencimento).slice(0, 10) : dataComp;
+      const lid = `fech_${competencia}_${i + 1}`;
+      const conc = cm[lid] || {};
       return {
-        id: `fech_${competencia}_${i + 1}`,
+        id: lid,
         data_competencia: dataComp,
         data_vencimento: venc,
         data_pagamento: isPago ? venc : null,
@@ -197,8 +200,8 @@ export class FluxoCaixaService {
         origem: item.cartao ? "cartao" : (String(item.origem || "") || origemDespesa(String(item.categoria || ""))),
         forma_pagamento: "",
         conta_financeira: "conta_principal",
-        conciliado: false,
-        status_conciliacao: "pendente",
+        conciliado: (conc as any).status_conciliacao === "conciliado",
+        status_conciliacao: (conc as any).status_conciliacao || "pendente",
         observacao: String(item.observacao || ""),
         fonte: "fechamento",
       };
@@ -222,7 +225,7 @@ export class FluxoCaixaService {
       const items = (fech.despesas_previstas as Record<string, unknown>[]) || [];
       if (items.length > 0) {
         fechMonths.add(comp);
-        result.push(...this.buildDespesasFromFechamento(fech, comp));
+        result.push(...this.buildDespesasFromFechamento(fech, comp, cm));
       }
     }
     // Meses sem fechamento: usa base_despesas normalmente
@@ -323,8 +326,10 @@ export class FluxoCaixaService {
         const valor = toFloat(ex.valor_previsto || ex.valor_mensal || ex.valor || 0);
         const isPago = String(ex.status_pagamento || "pendente").toLowerCase() === "pago";
         const dataComp = `${anoRef}-${String(mesRef).padStart(2, "0")}-01`;
+        const lid = `fech_cli_${competencia}_${i + 1}`;
+        const conc = cm[lid] || {};
         return {
-          id: `fech_cli_${competencia}_${i + 1}`,
+          id: lid,
           data_competencia: dataComp,
           data_vencimento: dataComp,
           data_pagamento: isPago ? (ex.data_pagamento || null) : null,
@@ -337,7 +342,8 @@ export class FluxoCaixaService {
           status: isPago ? "recebido" : "previsto",
           recorrente: false, origem: "cliente_mensal",
           forma_pagamento: "", conta_financeira: "conta_principal",
-          conciliado: false, status_conciliacao: "pendente",
+          conciliado: (conc as any).status_conciliacao === "conciliado",
+          status_conciliacao: (conc as any).status_conciliacao || "pendente",
           observacao: String(ex.observacao_pagamento || ""), fonte: "cliente_extra",
         };
       });
