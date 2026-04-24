@@ -387,7 +387,18 @@ export class FluxoCaixaService {
     const { mes, ano, tipo, status, cliente, categoria } = params;
     const anoRef = ano || new Date().getFullYear();
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
-    const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
+
+    // Se não há mês específico, constrói clientes para todos os 12 meses do ano
+    let cliLanc: Record<string, unknown>[];
+    if (mes) {
+      cliLanc = await this.buildClientes(cm, sm, mes, anoRef, fechMap);
+    } else {
+      const arrays = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => this.buildClientes(cm, sm, i + 1, anoRef, fechMap))
+      );
+      cliLanc = arrays.flat();
+    }
+
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
     const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm, sm)];
 
@@ -427,7 +438,18 @@ export class FluxoCaixaService {
   async getConciliacao(mes?: number, ano?: number): Promise<Record<string, unknown>> {
     const anoRef = ano || new Date().getFullYear();
     const [cm, sm, fechMap] = await Promise.all([this.concMap(), this.statusMap(), this.loadFechamentoMap()]);
-    const cliLanc = await this.buildClientes(cm, sm, mes, ano, fechMap);
+
+    // Se não há mês específico, constrói clientes para todos os 12 meses do ano
+    let cliLanc: Record<string, unknown>[];
+    if (mes) {
+      cliLanc = await this.buildClientes(cm, sm, mes, anoRef, fechMap);
+    } else {
+      const arrays = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => this.buildClientes(cm, sm, i + 1, anoRef, fechMap))
+      );
+      cliLanc = arrays.flat();
+    }
+
     const despesasLanc = await this.buildDespesasComFechamento(cm, sm, fechMap);
     const excelLanc = [...await this.buildReceitas(cm, sm), ...despesasLanc, ...await this.buildManuais(cm, sm)];
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
