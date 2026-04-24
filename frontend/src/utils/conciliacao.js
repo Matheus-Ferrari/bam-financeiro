@@ -8,8 +8,9 @@ import { normalizeText } from './csvParser'
 
 // ── Constantes ────────────────────────────────────────────────────────────
 
-const DATE_TOLERANCE_DAYS = 3
-const VALUE_TOLERANCE     = 0.05  // R$ 0,05 de tolerância por default
+const DATE_TOLERANCE_DAYS    = 3
+const DATE_CANDIDATE_WINDOW  = 45   // candidatos aceitos com até 45 dias de diferença
+const VALUE_TOLERANCE        = 0.05 // R$ 0,05 de tolerância por default
 
 // ── Status de conciliação por movimento ───────────────────────────────────
 
@@ -48,18 +49,50 @@ function dateDiffDays(a, b) {
 // ── Helpers de texto ──────────────────────────────────────────────────────
 
 /**
+ * Verifica se duas palavras são similares:
+ * - igualdade exata: 1.0
+ * - prefixo compartilhado de ≥5 chars: 0.80  (ex: "patri" em "patrik" e "patrick")
+ * - uma contém a outra (mín 2 chars): 0.65  (ex: "fe" em "fernanda")
+ */
+function wordsSimilar(a, b) {
+  if (a === b) return 1.0
+  const shorter = a.length <= b.length ? a : b
+  const longer  = a.length <= b.length ? b : a
+  const prefixLen = Math.min(shorter.length, 5)
+  if (prefixLen >= 3 && longer.startsWith(shorter.slice(0, prefixLen))) return 0.80
+  if (shorter.length >= 2 && longer.includes(shorter)) return 0.65
+  return 0
+}
+
+/**
  * Pontuação de similaridade entre dois textos normalizados (0–1).
- * Usa interseção de palavras / união.
+ * Usa interseção de palavras / união, com crédito parcial por prefixo/conteúdo.
  */
 function textSimilarity(a, b) {
   if (!a && !b) return 1
   if (!a || !b) return 0
-  const wa = new Set(a.split(' ').filter(Boolean))
-  const wb = new Set(b.split(' ').filter(Boolean))
-  const intersection = [...wa].filter(w => wb.has(w)).length
-  const union        = new Set([...wa, ...wb]).size
-  if (union === 0) return 0
-  return intersection / union
+  const wa = [...new Set(a.split(' ').filter(Boolean))]
+  const wb = [...new Set(b.split(' ').filter(Boolean))]
+
+  let totalScore = 0
+  const usedB = new Set()
+
+  for (const wordA of wa) {
+    let best = 0
+    let bestJ = -1
+    for (let j = 0; j < wb.length; j++) {
+      if (usedB.has(j)) continue
+      const s = wordsSimilar(wordA, wb[j])
+      if (s > best) { best = s; bestJ = j }
+    }
+    if (bestJ !== -1 && best > 0) {
+      usedB.add(bestJ)
+      totalScore += best
+    }
+  }
+
+  const union = new Set([...wa, ...wb]).size
+  return union === 0 ? 0 : totalScore / union
 }
 
 // ── Mapeamento de tipo ────────────────────────────────────────────────────
@@ -99,31 +132,41 @@ export function matchItem(csvItem, lancamentos = []) {
     tiposCompativeis(csvItem.type, l.type)
   )
 
+  // Texto de comparação: nome extraído do Pix > descrição completa
+  const csvTextRef = (csvItem.pixName && csvItem.pixName.length > 1)
+    ? csvItem.pixName
+    : csvItem.normalizedDescription
+
   let melhorScore = -1
   let melhorMatch = null
 
   for (const l of candidatos) {
-    // Valor interno (campo normalizado)
     const valorInterno = l.amount ?? 0
     const dataCsv      = csvItem.date
     const dataInterno  = l.date ?? ''
 
-    // 1. Diferença de valor
+    // 1. Diferença de valor — descarta se muito diferente (tolerância 35%)
     const diffValor = Math.abs(csvItem.amount - valorInterno)
-    if (diffValor > csvItem.amount * 0.15 + 1) continue  // >15% + R$1 → descarta
+    if (diffValor > csvItem.amount * 0.35 + 5) continue
 
-    // 2. Diferença de data
+    // 2. Diferença de data — janela ampliada para 45 dias
     const diffDias = dataInterno ? dateDiffDays(dataCsv, dataInterno) : 99
-    if (diffDias > DATE_TOLERANCE_DAYS + 2) continue  // até 5 dias de folga para candidatos
+    if (diffDias > DATE_CANDIDATE_WINDOW) continue
 
-    // 3. Similaridade textual
+    // 3. Similaridade textual usando nome do Pix (ou descrição normalizada)
     const normInterno = l.normalizedDescription ?? normalizeText(l.description ?? '')
-    const simTexto    = textSimilarity(csvItem.normalizedDescription, normInterno)
+    const simTexto    = textSimilarity(csvTextRef, normInterno)
 
-    // Score composto (quanto menor diff, maior score)
+    // 4. Rejeitar false positives: texto sem qualquer sobreposição
+    //    só aceita se valor E data forem exatos (match cirúrgico)
+    const valorExato = diffValor < VALUE_TOLERANCE
+    const dataExata  = diffDias  < 1
+    if (simTexto < 0.08 && !(valorExato && dataExata)) continue
+
+    // Score: texto é o critério principal agora
     const scoreValor = Math.max(0, 1 - diffValor / (csvItem.amount || 1))
-    const scoreData  = Math.max(0, 1 - diffDias / (DATE_TOLERANCE_DAYS + 2))
-    const score      = scoreValor * 0.45 + scoreData * 0.25 + simTexto * 0.30
+    const scoreData  = Math.max(0, 1 - diffDias  / DATE_CANDIDATE_WINDOW)
+    const score      = scoreValor * 0.40 + scoreData * 0.15 + simTexto * 0.45
 
     if (score > melhorScore) {
       melhorScore = score
@@ -132,7 +175,7 @@ export function matchItem(csvItem, lancamentos = []) {
   }
 
   // Sem candidato suficientemente bom
-  if (!melhorMatch || melhorScore < 0.25) {
+  if (!melhorMatch || melhorScore < 0.28) {
     return { status: STATUS_CONC.SEM_MATCH, match: null, divergencia: null }
   }
 
