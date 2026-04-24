@@ -1,8 +1,9 @@
-import { useState, useMemo, useCallback } from 'react'
+﻿import { useState, useMemo, useCallback } from 'react'
 import {
   RefreshCw, TrendingUp, TrendingDown, DollarSign, CheckCircle,
   AlertCircle, Clock, Filter, X, ChevronDown, Users,
   ArrowUpCircle, ArrowDownCircle, Banknote, Search, Edit2, Save,
+  Plus, Trash2, CreditCard,
 } from 'lucide-react'
 import {
   useFluxoCaixa,
@@ -16,7 +17,7 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import EmptyState from '../components/ui/EmptyState'
-import { formatCurrency, formatCompact } from '../utils/formatters'
+import { formatCurrency, formatCompact, formatDate } from '../utils/formatters'
 import {
   statusPagamentoBadge,
   statusConciliacaoBadge,
@@ -73,7 +74,7 @@ const INPUT_CLS =
   'px-3 py-2 rounded-lg text-xs text-white bg-black/40 border border-white/10 focus:outline-none focus:border-[#12F0C6]/50 placeholder:text-gray-600'
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 1 â€” Fluxo de Caixa
+// Tab 1 — Fluxo de Caixa
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const ORIGENS_OPCOES = [
@@ -123,7 +124,36 @@ function TabFluxo() {
   const [editRow, setEditRow]       = useState({})
   const [saving, setSaving]         = useState(false)
 
-  // Monta params para o backend
+  // Create new lancamento
+  const formDataAtual = () => {
+    const d = new Date(ano, mesNum - 1, Math.min(new Date().getDate(), 28))
+    return d.toISOString().slice(0, 10)
+  }
+  const FORM_EMPTY = {
+    data_competencia: formDataAtual(),
+    descricao: '', cliente: '', categoria: 'Ajuste Manual',
+    tipo: 'entrada', valor_previsto: '', valor_realizado: '0',
+    status: 'previsto', origem: 'ajuste_manual', observacao: '',
+  }
+  const [createOpen, setCreateOpen]     = useState(false)
+  const [createForm, setCreateForm]     = useState(FORM_EMPTY)
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createErr, setCreateErr]       = useState('')
+
+  // Delete manual
+  const [confirmDel, setConfirmDel] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [pendingDeletes, setPendingDeletes] = useState(new Set())
+
+  // Fatura do Cartão
+  const [somenteCartao, setSomenteCartao] = useState(false)
+  const [conferirFaturaOpen, setConferirFaturaOpen] = useState(false)
+  const [faturaValorReal, setFaturaValorReal] = useState('')
+
+  // Column-level filters (unique value dropdowns under each header)
+  const [colFilters, setColFilters] = useState({ data: '', descricao: '', cliente: '', categoria: '', tipo: '', status: '', origem: '' })
+  const setCol = (col, val) => setColFilters(f => ({ ...f, [col]: val }))
+
   const params = useMemo(() => {
     const p = {}
     if (periodo !== 'todo') {
@@ -140,6 +170,35 @@ function TabFluxo() {
   const { data: clientesData } = useClientes()
 
   const lancamentos = data?.lancamentos ?? []
+
+  // ── Fatura do Cart\u00e3o ──────────────────────────────────────────────────────
+  const lancamentosCartao = useMemo(
+    () => lancamentos.filter(l => l.origem === 'cartao'),
+    [lancamentos]
+  )
+  const totalFaturaCartao = useMemo(
+    () => lancamentosCartao.reduce((s, l) => {
+      const v = l.valor_realizado > 0 ? l.valor_realizado : (l.valor_previsto || 0)
+      return s + v
+    }, 0),
+    [lancamentosCartao]
+  )
+  const faturaTodasPagas = lancamentosCartao.length > 0 && lancamentosCartao.every(l => l.status === 'pago')
+  const proximoMesData = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 5)
+  const dataFaturaStr  = proximoMesData.toISOString().slice(0, 10)
+  const dataFaturaFmt  = proximoMesData.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const faturaValorDif = faturaValorReal !== '' ? parseFloat(faturaValorReal || '0') - totalFaturaCartao : null
+
+  // Totais locais excluindo cart\u00e3o (para caixa real)
+  const totalPagoSemCartao = useMemo(
+    () => lancamentos.filter(l => l.origem !== 'cartao' && l.tipo === 'saida').reduce((s, l) => s + (l.valor_realizado || 0), 0),
+    [lancamentos]
+  )
+  const totalRecebidoLocal = useMemo(
+    () => lancamentos.filter(l => l.tipo === 'entrada').reduce((s, l) => s + (l.valor_realizado || 0), 0),
+    [lancamentos]
+  )
+
   const clientesNomes = useMemo(
     () => (clientesData?.clientes ?? []).map(c => c.nome).filter(Boolean).sort(),
     [clientesData]
@@ -170,6 +229,25 @@ function TabFluxo() {
     if (origemFiltro)    result = result.filter(l => l.origem === origemFiltro)
     return result
   }, [lancamentos, busca, categoriaFiltro, origemFiltro])
+
+  // Column filters aplicados sobre filtrados (declarados aqui, após filtrados)
+  const colFilteredData = useMemo(() => {
+    let r = filtrados.filter(l => !pendingDeletes.has(l.id))
+    if (somenteCartao)        r = r.filter(l => l.origem === 'cartao')
+    if (colFilters.data)      r = r.filter(l => (l.data_competencia || '').startsWith(colFilters.data))
+    if (colFilters.descricao) r = r.filter(l => (l.descricao || '').toLowerCase().includes(colFilters.descricao.toLowerCase()))
+    if (colFilters.cliente)   r = r.filter(l => (l.cliente || '') === colFilters.cliente)
+    if (colFilters.categoria) r = r.filter(l => (l.categoria || '') === colFilters.categoria)
+    if (colFilters.tipo)      r = r.filter(l => (l.tipo || '') === colFilters.tipo)
+    if (colFilters.status)    r = r.filter(l => (l.status || '') === colFilters.status)
+    if (colFilters.origem)    r = r.filter(l => (l.origem || '') === colFilters.origem)
+    return r
+  }, [filtrados, colFilters, somenteCartao, pendingDeletes])
+
+  const uniqueVals = (key) => [...new Set(filtrados.map(l => l[key]).filter(Boolean))].sort()
+  const uniqueDatas = useMemo(() => [...new Set(lancamentos.map(l => (l.data_competencia || '').slice(0, 7)).filter(Boolean))].sort(), [lancamentos])
+
+  const COL_SELECT = 'w-full mt-1 text-[10px] bg-black/60 border border-white/10 rounded text-gray-400 focus:outline-none focus:border-[#12F0C6]/40 py-0.5 px-1'
 
   // â”€â”€ Edição inline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -279,6 +357,52 @@ function TabFluxo() {
     }
   }
 
+  // ── Criar lançamento manual ──────────────────────────────────────────
+  const handleCreate = async () => {
+    if (!createForm.descricao.trim()) { setCreateErr('Descrição é obrigatória.'); return }
+    if (!createForm.valor_previsto)   { setCreateErr('Valor é obrigatório.'); return }
+    const payload = {
+      ...createForm,
+      valor_previsto:  parseFloat(createForm.valor_previsto)  || 0,
+      valor_realizado: parseFloat(createForm.valor_realizado) || 0,
+      status_conciliacao: 'pendente',
+    }
+    console.log('[FluxoCaixa] Criando lançamento:', payload)
+    setCreateSaving(true); setCreateErr('')
+    try {
+      const res = await financeiroAPI.createLancamento(payload)
+      console.log('[FluxoCaixa] Lançamento criado:', res?.data)
+      setCreateOpen(false)
+      setCreateForm({ ...FORM_EMPTY, data_competencia: formDataAtual() })
+      refetch()
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || 'Erro desconhecido ao criar lançamento.'
+      console.error('[FluxoCaixa] Erro ao criar lançamento:', e?.response?.data ?? e)
+      setCreateErr(msg)
+    } finally { setCreateSaving(false) }
+  }
+
+  // ── Deletar lançamento manual ────────────────────────────────────────
+  const handleDeleteManual = async (id, extraIds = []) => {
+    const allIds = [id, ...extraIds.filter(x => x !== id)]
+    setDeletingId(id)
+    // Optimistic: hide immediately
+    setPendingDeletes(prev => new Set([...prev, ...allIds]))
+    try {
+      for (const did of allIds) {
+        await financeiroAPI.deleteLancamento(did)
+      }
+      setConfirmDel(null)
+    } catch (e) {
+      // Revert optimistic on error
+      setPendingDeletes(prev => { const s = new Set(prev); allIds.forEach(x => s.delete(x)); return s })
+      alert('Erro ao excluir: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setDeletingId(null)
+      refetch().then(() => setPendingDeletes(new Set()))
+    }
+  }
+
   const meses = [
     { v: 1, l: 'Janeiro' }, { v: 2, l: 'Fevereiro' }, { v: 3, l: 'Março' },
     { v: 4, l: 'Abril' },   { v: 5, l: 'Maio' },      { v: 6, l: 'Junho' },
@@ -287,13 +411,13 @@ function TabFluxo() {
   ]
 
   const cards = [
-    { icon: DollarSign,   label: 'Saldo Inicial',       value: formatCompact(data?.saldo_inicial ?? 0),            color: '#818CF8', sub: 'caixa atual' },
-    { icon: ArrowUpCircle,label: 'Entradas Previstas',   value: formatCompact(data?.total_entradas_previsto ?? 0),  color: '#12F0C6', sub: 'no período' },
-    { icon: ArrowUpCircle,label: 'Entradas Realizadas',  value: formatCompact(data?.total_entradas_realizado ?? 0), color: '#10B981', sub: 'recebido' },
-    { icon: ArrowDownCircle,label:'Saídas Previstas',    value: formatCompact(data?.total_saidas_previsto ?? 0),    color: '#F59E0B', sub: 'no período' },
-    { icon: ArrowDownCircle,label:'Saídas Realizadas',   value: formatCompact(data?.total_saidas_realizado ?? 0),   color: '#EF4444', sub: 'pago' },
-    { icon: Banknote,     label: 'Saldo Final Previsto', value: formatCompact(data?.saldo_final_previsto ?? 0),     color: '#818CF8', sub: 'projetado' },
-    { icon: Banknote,     label: 'Saldo Realizado',      value: formatCompact(data?.saldo_final_realizado ?? 0),    color: '#12F0C6', sub: 'efetivo' },
+    { icon: DollarSign,   label: 'Saldo Inicial',        value: formatCompact(data?.saldo_inicial ?? 0),                                                                        color: '#818CF8', sub: 'caixa atual' },
+    { icon: ArrowUpCircle,label: 'A Receber',              value: formatCompact(Math.max(0, (data?.total_entradas_previsto ?? 0) - (data?.total_entradas_realizado ?? 0))),        color: '#12F0C6', sub: 'pendente' },
+    { icon: ArrowUpCircle,label: 'Entradas Realizadas',    value: formatCompact(data?.total_entradas_realizado ?? 0),                                                              color: '#10B981', sub: 'recebido' },
+    { icon: ArrowDownCircle,label:'A Pagar',               value: formatCompact(Math.max(0, (data?.total_saidas_previsto ?? 0) - (data?.total_saidas_realizado ?? 0))),            color: '#F59E0B', sub: 'pendente' },
+    { icon: ArrowDownCircle,label:'Saídas Realizadas',     value: formatCompact(data?.total_saidas_realizado ?? 0),                                                              color: '#EF4444', sub: 'pago' },
+    { icon: Banknote,     label: 'Saldo Final Previsto',   value: formatCompact(data?.saldo_final_previsto ?? 0),                                                                  color: '#818CF8', sub: 'projeção total' },
+    { icon: Banknote,     label: 'Saldo Realizado',        value: formatCompact(data?.saldo_final_realizado ?? 0),                                                                  color: '#12F0C6', sub: 'efetivo' },
   ]
 
   const divergencia = data?.divergencia ?? 0
@@ -323,6 +447,101 @@ function TabFluxo() {
             </strong>
             &nbsp;·&nbsp;{data?.total_conciliados ?? 0} conciliados, {data?.total_pendentes_conciliacao ?? 0} pendentes
           </span>
+        </div>
+      )}
+
+
+      {/* Fatura do Cartao */}
+      {!loading && lancamentosCartao.length > 0 && (
+        <div className="rounded-xl border p-4 space-y-3"
+             style={{ background: 'rgba(129,140,248,0.05)', borderColor: 'rgba(129,140,248,0.25)' }}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <CreditCard size={15} style={{ color: '#818CF8' }} />
+              <p className="text-sm font-semibold text-white">Fatura do Cartão (Fechamento Atual)</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                style={faturaTodasPagas
+                  ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
+                  : { background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}>
+                {faturaTodasPagas ? '✓ Pago' : 'Em aberto'}
+              </span>
+            </div>
+            <button
+              onClick={() => setConferirFaturaOpen(v => !v)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5"
+              style={{ background: 'rgba(129,140,248,0.15)', color: '#818CF8', border: '1px solid rgba(129,140,248,0.3)' }}>
+              <CreditCard size={11} /> {conferirFaturaOpen ? 'Fechar conferência' : 'Conferir com valor real'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total da Fatura</p>
+              <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Lançamentos</p>
+              <p className="text-base font-bold text-white">{lancamentosCartao.length}</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Vencimento</p>
+              <p className="text-base font-bold text-white">{dataFaturaFmt}</p>
+              <p className="text-[10px] text-gray-600 mt-0.5">dia 05 do próximo mês</p>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+              <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Você precisa ter até dia 05</p>
+              <p className="text-base font-bold" style={{ color: '#F59E0B' }}>{formatCurrency(totalFaturaCartao)}</p>
+            </div>
+          </div>
+
+          {conferirFaturaOpen && (
+            <div className="border-t pt-3 space-y-3" style={{ borderColor: 'rgba(129,140,248,0.15)' }}>
+              <p className="text-xs text-gray-400 font-medium">Conferência de Fatura</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Calculado no sistema</p>
+                  <p className="text-base font-bold" style={{ color: '#818CF8' }}>{formatCurrency(totalFaturaCartao)}</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Valor real da fatura</p>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 3225.00"
+                    value={faturaValorReal}
+                    onChange={e => setFaturaValorReal(e.target.value)}
+                    className="w-full bg-transparent text-base font-bold text-white outline-none border-b pb-0.5 transition-colors"
+                    style={{ borderColor: faturaValorReal ? 'rgba(129,140,248,0.4)' : 'rgba(255,255,255,0.1)' }}
+                  />
+                  <p className="text-[10px] text-gray-600 mt-1">informe o valor do boleto/fatura</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Diferença</p>
+                  <p className="text-base font-bold" style={{
+                    color: faturaValorDif === null ? '#4B5563' : Math.abs(faturaValorDif) < 0.01 ? '#12F0C6' : '#F59E0B'
+                  }}>
+                    {faturaValorDif === null ? '—' : formatCurrency(faturaValorDif)}
+                  </p>
+                </div>
+              </div>
+              {faturaValorDif !== null && Math.abs(faturaValorDif) >= 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <AlertCircle size={13} style={{ color: '#F59E0B', flexShrink: 0 }} />
+                  <p className="text-xs text-yellow-300">
+                    Diferença de <strong>{formatCurrency(Math.abs(faturaValorDif))}</strong> encontrada. Verifique os lançamentos do cartão.
+                  </p>
+                </div>
+              )}
+              {faturaValorDif !== null && Math.abs(faturaValorDif) < 0.01 && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                     style={{ background: 'rgba(18,240,198,0.08)', border: '1px solid rgba(18,240,198,0.15)' }}>
+                  <CheckCircle size={13} style={{ color: '#12F0C6', flexShrink: 0 }} />
+                  <p className="text-xs" style={{ color: '#12F0C6' }}>Fatura confere com o sistema ✓</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -404,14 +623,31 @@ function TabFluxo() {
             />
           </div>
 
+          {/* Filtro rapido Cartao */}
+          <button
+            onClick={() => setSomenteCartao(v => !v)}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+            style={somenteCartao
+              ? { background: '#818CF8', color: '#000' }
+              : { background: 'rgba(255,255,255,0.05)', color: '#9CA3AF' }}>
+            <CreditCard size={12} /> Apenas Cartão
+          </button>
           <Button variant="ghost" size="sm" onClick={refetch}><RefreshCw size={13} /></Button>
         </div>
       </Card>
 
-      {/* â”€â”€ Tabela principal â”€â”€ */}
+      {/* ── Tabela principal ── */}
       <Card
         title="Lançamentos"
-        subtitle={`${filtrados.length} registros · clique em âœ para editar inline`}
+        subtitle={`${colFilteredData.length} lançamentos · ✎ editar inline · 🗑 excluir manuais e despesas do fechamento`}
+        action={
+          <button
+            onClick={() => { setCreateForm(FORM_EMPTY); setCreateErr(""); setCreateOpen(true) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-black"
+            style={{ background: "#12F0C6" }}>
+            <Plus size={12} /> Novo Lançamento
+          </button>
+        }
       >
         {loading ? <LoadingSpinner label="Carregando fluxo..." /> :
          error   ? <p className="text-red-400 text-sm">{error}</p> :
@@ -420,13 +656,68 @@ function TabFluxo() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-                  {['Data','Descrição','Cliente','Categoria','Tipo','Previsto','Realizado','Status','Origem','Conc.','Ações'].map(h => (
-                    <th key={h} className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">{h}</th>
-                  ))}
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Data</div>
+                    <select value={colFilters.data} onChange={e => setCol('data', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueDatas.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Descrição</div>
+                    <input
+                      type="text"
+                      value={colFilters.descricao}
+                      onChange={e => setCol('descricao', e.target.value)}
+                      placeholder="Filtrar..."
+                      className={COL_SELECT}
+                      style={{ width: '100%' }}
+                    />
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Cliente</div>
+                    <select value={colFilters.cliente} onChange={e => setCol('cliente', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      {uniqueVals('cliente').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Categoria</div>
+                    <select value={colFilters.categoria} onChange={e => setCol('categoria', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueVals('categoria').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Tipo</div>
+                    <select value={colFilters.tipo} onChange={e => setCol('tipo', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      <option value="entrada">Entrada</option>
+                      <option value="saida">Saída</option>
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Previsto</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Realizado</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Status</div>
+                    <select value={colFilters.status} onChange={e => setCol('status', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todos</option>
+                      {uniqueVals('status').map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">
+                    <div>Origem</div>
+                    <select value={colFilters.origem} onChange={e => setCol('origem', e.target.value)} className={COL_SELECT}>
+                      <option value="">Todas</option>
+                      {uniqueVals('origem').map(v => <option key={v} value={v}>{origemLabel(v)}</option>)}
+                    </select>
+                  </th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Conc.</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map(l => {
+                {colFilteredData.map(l => {
                   const isEditing = editingId === l.id
                   const isBusy    = atualizando === l.id
                   const rowBg     = isEditing ? 'rgba(18,240,198,0.04)' : undefined
@@ -446,7 +737,7 @@ function TabFluxo() {
                           ? <input type="date" className={CELL_INPUT} style={{ minWidth: 110 }}
                               value={editRow.data_competencia}
                               onChange={e => handleEditChange('data_competencia', e.target.value)} />
-                          : <span className="text-gray-400">{l.data_competencia ?? 'â€”'}</span>
+                          : <span className="text-gray-400">{formatDate(l.data_competencia) || '—'}</span>
                         }
                       </td>
 
@@ -456,7 +747,7 @@ function TabFluxo() {
                           ? <input type="text" className={CELL_INPUT}
                               value={editRow.descricao}
                               onChange={e => handleEditChange('descricao', e.target.value)} />
-                          : <span className="text-white truncate block max-w-[160px]">{l.descricao || 'â€”'}</span>
+                          : <span className="text-white truncate block max-w-[160px]">{l.descricao || '—'}</span>
                         }
                       </td>
 
@@ -466,10 +757,10 @@ function TabFluxo() {
                           ? <select className={CELL_SELECT}
                               value={editRow.cliente}
                               onChange={e => handleEditChange('cliente', e.target.value)}>
-                              <option value="">â€” Nenhum â€”</option>
+                              <option value="">— Nenhum —</option>
                               {clientesNomes.map(n => <option key={n} value={n}>{n}</option>)}
                             </select>
-                          : <span className="text-gray-300 truncate block max-w-[130px]">{l.cliente || 'â€”'}</span>
+                          : <span className="text-gray-300 truncate block max-w-[130px]">{l.cliente || '—'}</span>
                         }
                       </td>
 
@@ -479,7 +770,7 @@ function TabFluxo() {
                           ? <input type="text" className={CELL_INPUT}
                               value={editRow.categoria}
                               onChange={e => handleEditChange('categoria', e.target.value)} />
-                          : <span className="text-gray-400 truncate block max-w-[110px]">{l.categoria || 'â€”'}</span>
+                          : <span className="text-gray-400 truncate block max-w-[110px]">{l.categoria || '—'}</span>
                         }
                       </td>
 
@@ -515,8 +806,9 @@ function TabFluxo() {
                               value={editRow.valor_realizado}
                               onChange={e => handleEditChange('valor_realizado', e.target.value)} />
                           : <span className="font-semibold"
-                              style={{ color: l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
-                              {formatCurrency(l.valor_realizado)}
+                              title={l.origem === 'cartao' ? 'Será pago na fatura do cartão' : undefined}
+                              style={{ color: l.origem === 'cartao' ? '#818CF8' : l.valor_realizado > 0 ? COR_TIPO[l.tipo] : '#6B7280' }}>
+                              {formatCurrency(l.origem === 'cartao' && l.valor_realizado === 0 ? l.valor_previsto : l.valor_realizado)}
                             </span>
                         }
                       </td>
@@ -541,11 +833,16 @@ function TabFluxo() {
                               onChange={e => handleEditChange('origem', e.target.value)}>
                               {ORIGENS_OPCOES.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
                             </select>
-                          : <span className="text-gray-500">{origemLabel(l.origem)}</span>
+                          : l.origem === 'cartao'
+                            ? <span className="flex items-center gap-1" title="Será pago na fatura do cartão">
+                                <CreditCard size={10} style={{ color: '#818CF8' }} />
+                                <span style={{ color: '#818CF8' }}>Cartão</span>
+                              </span>
+                            : <span className="text-gray-500">{origemLabel(l.origem)}</span>
                         }
                       </td>
 
-                      {/* CONCILIADO â€” toggle sempre visível */}
+                      {/* CONCILIADO — toggle sempre visível */}
                       <td className="py-1.5 px-2 whitespace-nowrap" style={{ minWidth: 80 }}>
                         <button
                           disabled={atualizando === l.id + '_conc'}
@@ -557,7 +854,7 @@ function TabFluxo() {
                               ? { background: 'rgba(18,240,198,0.15)', color: '#12F0C6' }
                               : { background: 'rgba(245,158,11,0.10)', color: '#F59E0B' }
                           }>
-                          {l.status_conciliacao === 'conciliado' ? 'âœ“ Conc.' : '~ Pend.'}
+                          {l.status_conciliacao === 'conciliado' ? '✓ Conc.' : '◎ Pend.'}
                         </button>
                       </td>
 
@@ -596,7 +893,7 @@ function TabFluxo() {
                                 className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
                                 style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
                                 title="Marcar como Recebido">
-                                âœ“ Rec.
+                                ✓ Rec.
                               </button>
                             )}
                             {l.tipo === 'saida' && l.status !== 'pago' && (
@@ -606,7 +903,7 @@ function TabFluxo() {
                                 className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
                                 style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B' }}
                                 title="Marcar como Pago">
-                                âœ“ Pago
+                                ✓ Pago
                               </button>
                             )}
                             {(l.status === 'recebido' || l.status === 'pago') && (
@@ -619,12 +916,51 @@ function TabFluxo() {
                                 â†º
                               </button>
                             )}
+                            {(l.fonte === "manual" || l.fonte === "fechamento") && (
+                              <button
+                                disabled={deletingId === l.id}
+                                onClick={() => setConfirmDel(l)}
+                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                                style={{ background: "rgba(239,68,68,0.12)", color: "#EF4444" }}
+                                title="Excluir lançamento manual">
+                                <Trash2 size={10} />
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
                     </tr>
                   )
                 })}
+                {/* Lancamento ficticio da fatura do cartao */}
+                {totalFaturaCartao > 0 && !somenteCartao && (
+                  <tr className="border-t-2" style={{ borderColor: 'rgba(129,140,248,0.3)', background: 'rgba(129,140,248,0.04)' }}>
+                    <td className="py-2 px-2 text-gray-400 whitespace-nowrap text-xs">{dataFaturaStr}</td>
+                    <td className="py-2 px-2 whitespace-nowrap" style={{ minWidth: 130 }}>
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard size={11} style={{ color: '#818CF8' }} />
+                        <span className="text-white font-medium text-xs">Pagamento fatura cartão</span>
+                      </div>
+                    </td>
+                    <td className="py-2 px-2 text-gray-500 text-xs">—</td>
+                    <td className="py-2 px-2 text-gray-400 text-xs">Cartão de Crédito</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="font-semibold text-xs" style={{ color: '#EF4444' }}>Saída</span>
+                    </td>
+                    <td className="py-2 px-2 text-right whitespace-nowrap text-gray-300 text-xs">{formatCurrency(totalFaturaCartao)}</td>
+                    <td className="py-2 px-2 text-right whitespace-nowrap text-xs" style={{ color: '#6B7280' }}>{formatCurrency(0)}</td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(129,140,248,0.15)', color: '#818CF8' }}>Previsto</span>
+                    </td>
+                    <td className="py-2 px-2 whitespace-nowrap">
+                      <span className="flex items-center gap-1 text-[10px]" style={{ color: '#818CF8' }}>
+                        <CreditCard size={10} /> cartao_fatura
+                      </span>
+                    </td>
+                    <td className="py-2 px-2 whitespace-nowrap text-gray-600 text-[10px]">—</td>
+                    <td className="py-2 px-2 whitespace-nowrap text-gray-600 text-[10px]">auto</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -633,13 +969,142 @@ function TabFluxo() {
 
       {/* â”€â”€ Resumo lateral â”€â”€ */}
       {!loading && data && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Resumo label="A Receber no Período" value={data.total_entradas_previsto - data.total_entradas_realizado} color="#F59E0B" />
-          <Resumo label="Total Recebido"        value={data.total_entradas_realizado} color="#12F0C6" />
-          <Resumo label="A Pagar no Período"    value={data.total_saidas_previsto - data.total_saidas_realizado}    color="#F59E0B" />
-          <Resumo label="Total Pago"            value={data.total_saidas_realizado}    color="#EF4444" />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <Resumo label="Total Recebido" value={data.total_entradas_realizado} color="#12F0C6" />
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Pago (s/ cartão)</p>
+            <p className="text-base font-bold" style={{ color: '#EF4444' }}>{formatCompact(totalPagoSemCartao)}</p>
+            {totalFaturaCartao > 0 && (
+              <p className="text-[10px] mt-0.5" style={{ color: '#818CF8' }}>+{formatCompact(totalFaturaCartao)} na fatura</p>
+            )}
+          </div>
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Realizado</p>
+            <p className="text-base font-bold" style={{ color: (totalRecebidoLocal - totalPagoSemCartao) >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {formatCompact(totalRecebidoLocal - totalPagoSemCartao)}
+            </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">excluindo fatura cartão</p>
+          </div>
+          <Resumo label="Receita Prevista (total)"   value={data.total_entradas_previsto}                                         color="#12F0C6" />
+          <Resumo label="Despesas Previstas (total)"  value={data.total_saidas_previsto}                                           color="#F59E0B" />
+          {/* Resultado previsto — pode ser negativo */}
+          <div className="rounded-xl border p-4" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Resultado Previsto</p>
+            <p className="text-base font-bold" style={{ color: (data.total_entradas_previsto - data.total_saidas_previsto) >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {formatCompact(data.total_entradas_previsto - data.total_saidas_previsto)}
+            </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">receita total − despesas totais</p>
+          </div>
         </div>
       )}
+
+    {/* ── Modal: Novo Lançamento ───────────────────────────────── */}
+    {createOpen && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-lg space-y-4">
+          <h2 className="text-white font-semibold text-lg">Novo Lançamento Manual</h2>
+          {createErr && <p className="text-red-400 text-sm">{createErr}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-gray-400 mb-1 block">Descrição *</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.descricao} onChange={e => setCreateForm(f => ({...f, descricao: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Tipo *</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.tipo} onChange={e => setCreateForm(f => ({...f, tipo: e.target.value}))}>
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Data</label>
+              <input type="date" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.data_competencia} onChange={e => setCreateForm(f => ({...f, data_competencia: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Valor Previsto *</label>
+              <input type="number" step="0.01" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.valor_previsto} onChange={e => setCreateForm(f => ({...f, valor_previsto: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Valor Realizado</label>
+              <input type="number" step="0.01" className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.valor_realizado} onChange={e => setCreateForm(f => ({...f, valor_realizado: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Categoria</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.categoria} onChange={e => setCreateForm(f => ({...f, categoria: e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Status</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.status} onChange={e => setCreateForm(f => ({...f, status: e.target.value}))}>
+                <option value="previsto">Previsto</option>
+                <option value="recebido">Recebido</option>
+                <option value="pago">Pago</option>
+                <option value="pendente">Pendente</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Cliente</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.cliente} onChange={e => setCreateForm(f => ({...f, cliente: e.target.value}))}>
+                <option value="">— nenhum —</option>
+                {clientesNomes.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-gray-400 mb-1 block">Origem</label>
+              <select className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.origem} onChange={e => setCreateForm(f => ({...f, origem: e.target.value}))}>
+                <option value="ajuste_manual">Ajuste Manual</option>
+                <option value="cliente_mensal">Cliente Mensal</option>
+                <option value="despesa_fixa">Despesa Fixa</option>
+                <option value="despesa_variavel">Despesa Variável</option>
+                <option value="transferencia">Transferência</option>
+                <option value="boleto">Boleto</option>
+                <option value="cartao">Cartão</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-xs text-gray-400 mb-1 block">Observação</label>
+              <input className="w-full bg-[#0D1012] border border-[#2A2E31] rounded px-3 py-2 text-white text-sm" value={createForm.observacao} onChange={e => setCreateForm(f => ({...f, observacao: e.target.value}))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => { setCreateOpen(false); setCreateErr(''); }} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+            <button onClick={handleCreate} disabled={createSaving} className="px-4 py-2 text-sm bg-[#12F0C6] text-black rounded font-semibold hover:opacity-90 disabled:opacity-50">{createSaving ? 'Salvando…' : 'Salvar Lançamento'}</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* ── Confirm: Excluir Lançamento ──────────────────────────── */}
+    {confirmDel && (() => {
+      // find duplicates: same descricao + fonte deletável
+      const dupIds = lancamentos
+        .filter(l => l.descricao === confirmDel.descricao && (l.fonte === 'manual' || l.fonte === 'fechamento') && l.id !== confirmDel.id)
+        .map(l => l.id)
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-sm space-y-4">
+            <h2 className="text-white font-semibold text-lg">Excluir lançamento?</h2>
+            <p className="text-gray-400 text-sm">Esta ação não pode ser desfeita. O lançamento <span className="text-white font-medium">{confirmDel.descricao}</span> será removido permanentemente.</p>
+            {dupIds.length > 0 && (
+              <p className="text-yellow-400 text-xs">⚠ Encontrado{dupIds.length > 1 ? 's' : ''} {dupIds.length} entrada{dupIds.length > 1 ? 's' : ''} duplicada{dupIds.length > 1 ? 's' : ''} com este nome.</p>
+            )}
+            <div className="flex justify-end gap-3 pt-2 flex-wrap">
+              <button onClick={() => setConfirmDel(null)} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+              {dupIds.length > 0 && (
+                <button
+                  onClick={() => handleDeleteManual(confirmDel.id, dupIds)}
+                  disabled={!!deletingId}
+                  className="px-4 py-2 text-sm rounded font-semibold hover:opacity-90 disabled:opacity-50"
+                  style={{ background: '#B91C1C', color: '#fff' }}>
+                  {deletingId ? 'Excluindo…' : `Excluir todos (${dupIds.length + 1})`}
+                </button>
+              )}
+              <button onClick={() => handleDeleteManual(confirmDel.id)} disabled={!!deletingId} className="px-4 py-2 text-sm bg-red-500 text-white rounded font-semibold hover:opacity-90 disabled:opacity-50">{deletingId ? 'Excluindo…' : 'Excluir este'}</button>
+            </div>
+          </div>
+        </div>
+      )
+    })()}
     </div>
   )
 }
@@ -654,7 +1119,7 @@ function Resumo({ label, value, color }) {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 2 â€” Conciliação
+// Tab 2 — Conciliação
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabConciliacao() {
@@ -665,8 +1130,36 @@ function TabConciliacao() {
   const [filtroConc, setFiltroConc] = useState('pendente')
   const [busca, setBusca] = useState('')
   const [marcando, setMarcando] = useState(null)
+  const [saldoReal, setSaldoReal] = useState('')
+  const [ajustandoSaldo, setAjustandoSaldo] = useState(false)
 
   const { data, loading, error, refetch } = useConciliacao({ mes, ano })
+
+  const saldoTeorico   = (data?.total_entradas_realizado ?? 0) - (data?.total_saidas_realizado ?? 0)
+  const diferencaSaldo = parseFloat(saldoReal || 0) - saldoTeorico
+
+  const handleGerarAjuste = async () => {
+    setAjustandoSaldo(true)
+    try {
+      await financeiroAPI.createLancamento({
+        descricao:        'Ajuste de Conciliação',
+        categoria:        'Ajuste de Conciliação',
+        tipo:             diferencaSaldo >= 0 ? 'entrada' : 'saida',
+        valor_previsto:   Math.abs(diferencaSaldo),
+        valor_realizado:  Math.abs(diferencaSaldo),
+        status:           'pago',
+        origem:           'ajuste_manual',
+        data_competencia: `${ano}-${String(mes).padStart(2, '0')}-01`,
+        observacao:       `Ajuste de conciliação. Saldo real informado: ${saldoReal}`,
+      })
+      refetch()
+      setSaldoReal('')
+    } catch (e) {
+      alert('Erro ao gerar ajuste: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setAjustandoSaldo(false)
+    }
+  }
 
   const lancamentos = useMemo(() => {
     let list = data?.lancamentos ?? []
@@ -773,14 +1266,14 @@ function TabConciliacao() {
                   <tr key={l.id}
                       className="border-b hover:bg-white/[0.02] transition-colors"
                       style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-                    <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{l.data_competencia}</td>
+                    <td className="py-2 px-3 text-gray-400 whitespace-nowrap">{formatDate(l.data_competencia)}</td>
                     <td className="py-2 px-3 whitespace-nowrap">
                       <span style={{ color: COR_TIPO[l.tipo] ?? '#9CA3AF' }} className="font-semibold">
                         {tipoLabel(l.tipo)}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || 'â€”'}</td>
-                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || 'â€”'}</td>
+                    <td className="py-2 px-3 text-white max-w-[160px] truncate">{l.descricao || '—'}</td>
+                    <td className="py-2 px-3 text-gray-300 max-w-[110px] truncate">{l.cliente || '—'}</td>
                     <td className="py-2 px-3 text-right whitespace-nowrap font-semibold text-white">
                       {formatCurrency(l.valor_previsto)}
                     </td>
@@ -794,7 +1287,7 @@ function TabConciliacao() {
                           className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
                           style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
                           title="Marcar como conciliado">
-                          âœ“ Ok
+                          ✓ Ok
                         </button>
                         <button
                           disabled={marcando === l.id}
@@ -810,7 +1303,7 @@ function TabConciliacao() {
                           className="px-2 py-1 rounded text-[10px] font-medium transition-colors"
                           style={{ background: 'rgba(255,255,255,0.06)', color: '#9CA3AF' }}
                           title="Marcar como pendente">
-                          ~ Pend
+                          ◎ Pend
                         </button>
                       </div>
                     </td>
@@ -821,6 +1314,74 @@ function TabConciliacao() {
           </div>
         )}
       </Card>
+
+      {/* Conciliação de Saldo */}
+      <div className="rounded-xl p-4 space-y-3" style={{ background: '#272C30', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center gap-2">
+          <Banknote size={14} style={{ color: '#12F0C6' }} />
+          <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Conciliação de Saldo</p>
+          {!loading && <p className="text-[10px] text-gray-600 ml-auto">Base: lançamentos realizados no mês</p>}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Saldo calculado */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saldo Calculado</p>
+            <p className="text-base font-bold" style={{ color: loading ? '#4B5563' : saldoTeorico >= 0 ? '#12F0C6' : '#EF4444' }}>
+              {loading ? '...' : formatCurrency(saldoTeorico)}
+            </p>
+            <p className="text-[10px] text-gray-600 mt-0.5">entradas realizadas − saídas realizadas</p>
+          </div>
+          {/* Saldo real */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Saldo Real da Conta</p>
+            <input
+              type="number"
+              placeholder="Ex: 12500.00"
+              value={saldoReal}
+              onChange={e => setSaldoReal(e.target.value)}
+              className="w-full bg-transparent text-base font-bold text-white outline-none border-b pb-0.5 transition-colors"
+              style={{ borderColor: saldoReal ? 'rgba(18,240,198,0.4)' : 'rgba(255,255,255,0.1)' }}
+            />
+            <p className="text-[10px] text-gray-600 mt-1">informe o saldo do seu banco</p>
+          </div>
+          {/* Diferença */}
+          <div className="rounded-lg p-3" style={{ background: 'rgba(0,0,0,0.25)' }}>
+            <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Diferença</p>
+            <p className="text-base font-bold" style={{
+              color: saldoReal === '' ? '#4B5563' : Math.abs(diferencaSaldo) < 0.01 ? '#12F0C6' : '#F59E0B'
+            }}>
+              {saldoReal === '' ? '—' : formatCurrency(diferencaSaldo)}
+            </p>
+            <p className="text-[10px] mt-0.5" style={{
+              color: saldoReal === '' ? '#374151' : Math.abs(diferencaSaldo) < 0.01 ? '#6EE7B7' : '#FCD34D'
+            }}>
+              {saldoReal === '' ? 'informe o saldo real' : Math.abs(diferencaSaldo) < 0.01 ? 'Saldos conferem ✓' : 'Divergência detectada'}
+            </p>
+          </div>
+        </div>
+        {saldoReal !== '' && Math.abs(diferencaSaldo) >= 0.01 && (
+          <div className="flex items-center gap-3 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <p className="text-xs text-gray-500 flex-1">
+              Diferença de <span className="text-yellow-400 font-semibold">{formatCurrency(Math.abs(diferencaSaldo))}</span> detectada.
+              Será criado um lançamento de <strong>{diferencaSaldo >= 0 ? 'entrada' : 'saída'}</strong> como ajuste.
+            </p>
+            <button
+              onClick={handleGerarAjuste}
+              disabled={ajustandoSaldo}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap disabled:opacity-40"
+              style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.25)' }}>
+              <Plus size={11} />
+              {ajustandoSaldo ? 'Criando...' : 'Gerar ajuste de conciliação'}
+            </button>
+          </div>
+        )}
+        {saldoReal !== '' && Math.abs(diferencaSaldo) < 0.01 && (
+          <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+            <CheckCircle size={12} style={{ color: '#12F0C6' }} />
+            <span className="text-xs" style={{ color: '#12F0C6' }}>Saldo conferido! Nenhum ajuste necessário.</span>
+          </div>
+        )}
+      </div>
 
       {/* Orientação futura */}
       <div className="rounded-xl border border-dashed p-4 flex gap-3 items-start"
@@ -839,7 +1400,7 @@ function TabConciliacao() {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// Tab 3 â€” Recebimentos por Cliente
+// Tab 3 — Recebimentos por Cliente
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function TabRecebimentos() {
@@ -998,7 +1559,7 @@ function TabRecebimentos() {
                       </td>
                       <td className="py-2 px-3 text-right whitespace-nowrap"
                           style={{ color: c.pendencia > 0 ? '#F59E0B' : '#6B7280' }}>
-                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : 'â€”'}
+                        {c.pendencia > 0 ? formatCurrency(c.pendencia) : '—'}
                       </td>
                       <td className="py-2 px-3 whitespace-nowrap">
                         <p className="text-gray-300">dia {c.dia_pagamento}</p>
@@ -1013,7 +1574,7 @@ function TabRecebimentos() {
                             <button disabled={loading_} onClick={() => handlePagamento(c, 'pago')}
                               className="px-2 py-1 rounded text-[10px] font-medium"
                               style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}>
-                              âœ“ Recebido
+                              ✓ Recebido
                             </button>
                           )}
                           {c.status_pagamento !== 'pago' && (

@@ -10,7 +10,8 @@ venv/
 
 # Env
 .env
-*.env
+.env.local
+.env.*.local
 
 # Credenciais / Service Accounts — NUNCA commitar
 *firebase-adminsdk*.json

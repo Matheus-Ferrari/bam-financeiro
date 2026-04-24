@@ -1,56 +1,47 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
-  TrendingUp,
-  TrendingDown,
-  BarChart2,
-  Sliders,
   Settings,
   ChevronRight,
   Users,
   HeartPulse,
-  FolderPlus,
-  Award,
-  CreditCard,
   Wallet,
+  CalendarCheck,
+  LogOut,
 } from 'lucide-react'
 import { useHealth } from '../hooks/useFinanceiro'
+import { useAuth } from '../context/AuthContext'
 
 const NAV_ITEMS = [
-  { to: '/dashboard',           label: 'Dashboard',           icon: LayoutDashboard },
-  { to: '/fluxo-caixa',         label: 'Fluxo de Caixa',      icon: Wallet          },
-  { to: '/clientes',            label: 'Clientes',            icon: Users           },
-  { to: '/receitas',            label: 'Receitas',            icon: TrendingUp      },
-  { to: '/despesas',            label: 'Despesas',            icon: TrendingDown    },
-  { to: '/despesas-locais',     label: 'Despesas Fixas',      icon: CreditCard      },
-  { to: '/projetos-adicionais', label: 'Proj. Adicionais',   icon: FolderPlus      },
-  { to: '/comissoes',           label: 'Comissões',           icon: Award           },
-  { to: '/projecoes',           label: 'Projeções',           icon: BarChart2       },
-  { to: '/cenarios',            label: 'Cenários',            icon: Sliders         },
-  { to: '/saude',               label: 'Saúde Financeira',    icon: HeartPulse      },
-  { to: '/configuracoes',       label: 'Configurações',       icon: Settings        },
+  { to: '/dashboard',   label: 'Dashboard',         icon: LayoutDashboard },
+  { to: '/fluxo-caixa', label: 'Fluxo de Caixa',    icon: Wallet          },
+  { to: '/clientes',    label: 'Clientes',          icon: Users           },
+  { to: '/fechamento',  label: 'Fechamento do Mês', icon: CalendarCheck   },
+  { to: '/saude',       label: 'Saúde Financeira',  icon: HeartPulse      },
+  { to: '/configuracoes', label: 'Configurações',   icon: Settings        },
 ]
 
 const PAGE_TITLES = {
-  '/dashboard':           'Dashboard',
-  '/fluxo-caixa':         'Fluxo de Caixa',
-  '/receitas':            'Receitas',
-  '/despesas':            'Despesas',
-  '/despesas-locais':     'Despesas Fixas',
-  '/projetos-adicionais': 'Projetos Adicionais',
-  '/comissoes':           'Comissões',
-  '/projecoes':           'Projeções',
-  '/cenarios':            'Cenários',
-  '/clientes':            'Clientes',
-  '/saude':               'Saúde Financeira',
-  '/configuracoes':       'Configurações',
+  '/dashboard':     'Dashboard',
+  '/fluxo-caixa':   'Fluxo de Caixa',
+  '/clientes':      'Clientes',
+  '/fechamento':    'Fechamento do Mês',
+  '/saude':         'Saúde Financeira',
+  '/configuracoes': 'Configurações',
 }
 
 export default function MainLayout() {
   const location = useLocation()
+  const navigate  = useNavigate()
   const { data: health } = useHealth()
+  const { user, logout } = useAuth()
   const pageTitle = PAGE_TITLES[location.pathname] || 'BAM Financeiro'
   const apiOk     = health?.status === 'ok'
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/', { replace: true })
+  }
 
   return (
     <div className="flex h-screen bg-black overflow-hidden">
@@ -63,7 +54,7 @@ export default function MainLayout() {
         <div className="h-16 flex items-center px-5 border-b"
              style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
           <img
-            src="/LogoBam.png"
+            src={`${import.meta.env.BASE_URL}LogoBam.png`}
             alt="BAM Financeiro"
             className="h-9 w-auto object-contain"
           />
@@ -99,15 +90,29 @@ export default function MainLayout() {
         </nav>
 
         {/* Status API */}
-        <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center gap-2">
+        <div className="px-4 py-3 border-t" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
+          <div className="flex items-center gap-2 mb-2">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${apiOk ? 'bg-green-400' : 'bg-red-500'}`}
                   style={apiOk ? { background: '#12F0C6', boxShadow: '0 0 6px #12F0C6' } : {}} />
             <span className="text-xs text-gray-500">
               API {apiOk ? 'conectada' : 'offline'}
             </span>
           </div>
-          <p className="text-[10px] text-gray-700 mt-1">v1.0.0 · BAM Financeiro</p>
+          <p className="text-[10px] text-gray-700 mb-3">v1.0.0 · BAM Financeiro</p>
+
+          {/* Usuário + Logout */}
+          <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-gray-300 truncate">{user?.usuario?.email ?? user?.email ?? 'Usuário'}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Sair"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-500 hover:text-red-400 hover:bg-red-400/10 transition-colors flex-shrink-0"
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -127,7 +132,7 @@ export default function MainLayout() {
             </span>
             <div className="w-px h-4" style={{ background: 'rgba(255,255,255,0.1)' }} />
             <img
-              src="/LogoBam.png"
+              src={`${import.meta.env.BASE_URL}LogoBam.png`}
               alt="BAM"
               className="h-8 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity"
             />
