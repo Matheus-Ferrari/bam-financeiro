@@ -49,10 +49,28 @@ function dateDiffDays(a, b) {
 // ── Helpers de texto ──────────────────────────────────────────────────────
 
 /**
+ * Distância de Levenshtein entre duas strings curtas.
+ */
+function levenshtein(a, b) {
+  const m = a.length, n = b.length
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)])
+  for (let j = 0; j <= n; j++) dp[0][j] = j
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    }
+  }
+  return dp[m][n]
+}
+
+/**
  * Verifica se duas palavras são similares:
  * - igualdade exata: 1.0
  * - prefixo compartilhado de ≥5 chars: 0.80  (ex: "patri" em "patrik" e "patrick")
  * - uma contém a outra (mín 2 chars): 0.65  (ex: "fe" em "fernanda")
+ * - levenshtein ≤2 para palavras ≥5 chars: 0.70  (ex: "eletrotec" vs "electrotec")
  */
 function wordsSimilar(a, b) {
   if (a === b) return 1.0
@@ -61,6 +79,7 @@ function wordsSimilar(a, b) {
   const prefixLen = Math.min(shorter.length, 5)
   if (prefixLen >= 3 && longer.startsWith(shorter.slice(0, prefixLen))) return 0.80
   if (shorter.length >= 2 && longer.includes(shorter)) return 0.65
+  if (shorter.length >= 5 && levenshtein(a, b) <= 2) return 0.70
   return 0
 }
 
@@ -154,8 +173,12 @@ export function matchItem(csvItem, lancamentos = []) {
     if (diffDias > DATE_CANDIDATE_WINDOW) continue
 
     // 3. Similaridade textual usando nome do Pix (ou descrição normalizada)
-    const normInterno = l.normalizedDescription ?? normalizeText(l.description ?? '')
-    const simTexto    = textSimilarity(csvTextRef, normInterno)
+    //    Também compara contra l.cliente normalizado (ex: CSV "eletrotec" vs interno cliente "Electrotec")
+    const normInterno  = l.normalizedDescription ?? normalizeText(l.description ?? '')
+    const normCliente  = normalizeText(l.cliente ?? '')
+    const simTextoDesc   = textSimilarity(csvTextRef, normInterno)
+    const simTextoClient = normCliente ? textSimilarity(csvTextRef, normCliente) : 0
+    const simTexto       = Math.max(simTextoDesc, simTextoClient)
 
     // 4. Rejeitar false positives: texto sem qualquer sobreposição
     //    só aceita se valor E data forem exatos (match cirúrgico)

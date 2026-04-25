@@ -224,11 +224,12 @@ function BulkActionBar({ count, totalVisible, onSelectAll, onClear, onConciliar,
 
 // ── Linha da tabela ───────────────────────────────────────────────────────
 
-function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved }) {
+function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved, onDeleteMatch }) {
   const [open, setOpen] = useState(false)
   const [editando, setEditando] = useState(false)
   const [editForm, setEditForm] = useState({ valor: '', descricao: '', obs: '' })
   const [editSaving, setEditSaving] = useState(false)
+  const [deletingMatch, setDeletingMatch] = useState(false)
   const { csvItem, match, divergencia } = resultado
 
   const valorInt  = match ? (match.amount ?? 0) : null
@@ -255,6 +256,20 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
       alert('Erro ao salvar: ' + (e?.response?.data?.detail ?? e.message))
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  async function excluirMatchLinha() {
+    if (!match?.id) return
+    if (!window.confirm(`Excluir o lançamento interno "${match.description}"?\n\nEsta ação não pode ser desfeita.`)) return
+    setDeletingMatch(true)
+    try {
+      await financeiroAPI.deleteLancamento(String(match.id))
+      await onLancamentoSaved?.()
+    } catch (e) {
+      alert('Erro ao excluir: ' + (e?.response?.data?.detail ?? e.message))
+    } finally {
+      setDeletingMatch(false)
     }
   }
 
@@ -343,6 +358,13 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
                 <button onClick={() => onAction(csvItem.id, 'undo')}
                   className="px-2 py-1 rounded text-[10px] border transition-colors hover:bg-white/5"
                   style={{ borderColor: '#374151', color: '#6B7280' }} title="Desfazer">↩</button>
+              )}
+              {match?.id && ['manual', 'fechamento', 'cliente_extra'].includes(match.fonte || match.origem) && (
+                <button onClick={excluirMatchLinha} disabled={deletingMatch}
+                  className="px-2 py-1 rounded text-[10px] border transition-colors hover:bg-red-500/10"
+                  style={{ borderColor: '#EF444477', color: '#EF4444' }} title="Excluir lançamento interno">
+                  {deletingMatch ? '⋯' : '🗑'}
+                </button>
               )}
             </div>
           )}
@@ -531,12 +553,15 @@ export default function Conciliacao() {
             id:                    String(l.id || ''),
             date:                  String(l.data_competencia || '').slice(0, 10),
             description:           desc,
-            amount:                Math.round(Math.abs(Number(l.valor_realizado) || 0) * 100) / 100,
+            // Usa valor_realizado se > 0, senão valor_previsto (lançamentos "previsto" têm realizado=0)
+            amount:                Math.round(Math.abs(Number(l.valor_realizado) || Number(l.valor_previsto) || 0) * 100) / 100,
+            valorPrevisto:         Math.round(Math.abs(Number(l.valor_previsto) || 0) * 100) / 100,
             type:                  l.tipo === 'entrada' ? 'entrada' : 'saida',
             status:                String(l.status || ''),
             origem:                String(l.origem || ''),
             categoria:             String(l.categoria || ''),
             cliente:               String(l.cliente || ''),
+            fonte:                 String(l.fonte || ''),
             conciliado:            l.status_conciliacao === 'conciliado' || Boolean(l.conciliado),
             conciliacaoId:         l.conciliacaoId ?? null,
             normalizedDescription: normalizeText(desc),
@@ -1094,6 +1119,21 @@ export default function Conciliacao() {
                       style={{ borderColor: GREEN + '66', color: GREEN }}>
                       Conciliar assim
                     </button>
+                    {r.match?.id && ['manual', 'fechamento', 'cliente_extra'].includes(r.match.fonte || r.match.origem) && (
+                      <button onClick={async () => {
+                        if (!window.confirm(`Excluir o lançamento interno "${r.match.description}"?\n\nEsta ação não pode ser desfeita.`)) return
+                        try {
+                          await financeiroAPI.deleteLancamento(String(r.match.id))
+                          await carregarLancamentos()
+                        } catch (e) {
+                          alert('Erro ao excluir: ' + (e?.response?.data?.detail ?? e.message))
+                        }
+                      }}
+                        className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-red-500/10"
+                        style={{ borderColor: '#EF444466', color: '#EF4444' }}>
+                        Excluir interno
+                      </button>
+                    )}
                   </div>
                   {/* Info do lançamento interno */}
                   {(r.match?.cliente || r.match?.categoria || r.match?.origem) && (
