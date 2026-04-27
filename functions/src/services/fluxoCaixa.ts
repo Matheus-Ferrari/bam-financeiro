@@ -529,6 +529,19 @@ export class FluxoCaixaService {
     return await movimentacoesStorage.create(payload);
   }
 
+  private async cleanOverridesForId(lancamentoId: string): Promise<void> {
+    const [soAll, concAll] = await Promise.all([
+      statusOverridesStorage.all(),
+      conciliacaoStorage.all(),
+    ]);
+    await Promise.all([
+      ...soAll.filter((r) => String(r.lancamento_id || "") === lancamentoId)
+        .map((r) => statusOverridesStorage.delete(String(r.id))),
+      ...concAll.filter((r) => String(r.lancamento_id || "") === lancamentoId)
+        .map((r) => conciliacaoStorage.delete(String(r.id))),
+    ]);
+  }
+
   async deleteManual(id: string): Promise<Record<string, unknown>> {
     // Handle fechamento-based entries: fech_{competencia}_{1-based-index}
     if (id.startsWith("fech_")) {
@@ -545,19 +558,33 @@ export class FluxoCaixaService {
       const fech = all.find((f) => String(f.competencia || "").startsWith(competencia));
       if (!fech) throw new Error("Fechamento não encontrado para competência: " + competencia);
 
+      // Ensure we have a valid Firestore document id
+      const fechFirestoreId = String(fech.id || "");
+      if (!fechFirestoreId) throw new Error("Fechamento encontrado mas sem ID válido no Firestore para competência: " + competencia);
+
       const despPrev = ((fech.despesas_previstas as Record<string, unknown>[]) || []);
       const novosGastos = ((fech.novos_gastos as Record<string, unknown>[]) || []);
+      const totalItems = despPrev.length + novosGastos.length;
 
       if (zeroIdx < despPrev.length) {
         // Item is in despesas_previstas
         const newDespPrev = despPrev.filter((_, i) => i !== zeroIdx);
-        await fechamentoStorage.update(String(fech.id), { despesas_previstas: newDespPrev });
+        await fechamentoStorage.update(fechFirestoreId, { despesas_previstas: newDespPrev });
       } else {
         // Item is in novos_gastos
         const novosIdx = zeroIdx - despPrev.length;
         const newNovos = novosGastos.filter((_, i) => i !== novosIdx);
-        await fechamentoStorage.update(String(fech.id), { novos_gastos: newNovos });
+        await fechamentoStorage.update(fechFirestoreId, { novos_gastos: newNovos });
       }
+
+      // Clean up overrides for the deleted item AND for all shifted items
+      // (since fech_ IDs are index-based, items after the deleted one shift down)
+      const cleanupIds: string[] = [];
+      for (let i = oneBasedIdx; i <= totalItems; i++) {
+        cleanupIds.push(`fech_${competencia}_${i}`);
+      }
+      await Promise.all(cleanupIds.map((lid) => this.cleanOverridesForId(lid)));
+
       return { ok: true, id };
     }
 
@@ -566,7 +593,10 @@ export class FluxoCaixaService {
     const movs = await movimentacoesStorage.all();
     const mov = movs.find((m) => String(m.id) === rawId);
     if (!mov) throw new Error("Lançamento não encontrado ou não é manual");
-    await movimentacoesStorage.delete(rawId);
+    await Promise.all([
+      movimentacoesStorage.delete(rawId),
+      this.cleanOverridesForId(id),
+    ]);
     return { ok: true, id };
   }
 }

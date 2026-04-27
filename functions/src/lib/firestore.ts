@@ -27,7 +27,12 @@ export class FirestoreStorage {
 
   async all(): Promise<StorageRecord[]> {
     const snap = await this.col.get();
-    return snap.docs.map((d) => d.data() as StorageRecord);
+    return snap.docs.map((d) => {
+      const data = d.data() as StorageRecord;
+      // Ensure the document always has an 'id' field matching the Firestore doc id
+      if (!data.id) data.id = d.id;
+      return data;
+    });
   }
 
   async get(id: string): Promise<StorageRecord | null> {
