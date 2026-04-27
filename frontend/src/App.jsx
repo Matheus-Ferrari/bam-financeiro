@@ -18,6 +18,7 @@ import Comissoes           from './pages/Comissoes'
 import DespesasLocais      from './pages/DespesasLocais'
 import FluxoCaixa          from './pages/FluxoCaixa'
 import FechamentoMes       from './pages/FechamentoMes'
+import Conciliacao         from './pages/Conciliacao'
 
 export default function App() {
   return (
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="despesas-locais"      element={<DespesasLocais />} />
             <Route path="fluxo-caixa"           element={<FluxoCaixa />} />
             <Route path="fechamento"             element={<FechamentoMes />} />
+            <Route path="conciliacao"            element={<Conciliacao />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
