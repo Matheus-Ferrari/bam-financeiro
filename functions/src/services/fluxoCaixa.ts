@@ -291,9 +291,18 @@ export class FluxoCaixaService {
         const statusPgto = String(c.status_pagamento || "pendente").toLowerCase();
         let status = statusPgto === "pago" ? "recebido" : statusPgto === "atrasado" ? "vencido" : "previsto";
 
+        // Meses futuros nunca podem estar recebidos automaticamente —
+        // o campo status_pagamento do cliente reflete o pagamento atual,
+        // não pagamentos que ainda não ocorreram.
+        const hoje = new Date();
+        const isFuturo = anoRef > hoje.getFullYear() ||
+          (anoRef === hoje.getFullYear() && mesRef > hoje.getMonth() + 1);
+        if (isFuturo && status !== "previsto") status = "previsto";
+
         const lid = `cli_${c.id}_${anoRef}${String(mesRef).padStart(2, "0")}`;
         const conc = cm[lid] || {};
         const ov = sm[lid] || {};
+        // Override manual do usuário sempre prevalece (mesmo em meses futuros)
         if (ov.status) status = String(ov.status);
         const valorReal = ov.valor_realizado != null ? toFloat(ov.valor_realizado) : status === "recebido" ? toFloat(c.valor_recebido || valor) : 0;
         const valPrev = toFloat(ov.valor_previsto || valor);
