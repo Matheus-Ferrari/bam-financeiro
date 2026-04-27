@@ -537,9 +537,13 @@ export default function Conciliacao() {
       const res  = await financeiroAPI.getFluxoCaixa({ ano })
       const list = res.data?.lancamentos ?? []
 
-      // Filtra pelo período selecionado
-      const inicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`
-      const fim    = `${ano}-${String(mesFim).padStart(2, '0')}-31`
+      // Filtra pelo período selecionado, com ±1 mês de margem para que o
+      // matcher (janela de 45 dias) consiga casar lançamentos no início/fim
+      // do período sem perdê-los pelo recorte.
+      const mIni = Math.max(1,  mesInicio - 1)
+      const mFim = Math.min(12, mesFim    + 1)
+      const inicio = `${ano}-${String(mIni).padStart(2, '0')}-01`
+      const fim    = `${ano}-${String(mFim).padStart(2, '0')}-31`
 
       // Mapeia do formato da API para o formato LancamentoInterno
       const mapped = list
