@@ -1090,16 +1090,16 @@ export default function Conciliacao() {
     [resultados]
   )
 
+  const hasData = Boolean(csvData?.items?.length)
+  const hasCsvPeriodo = csvItemsFiltrados.length > 0
+  const hasLanc = lancamentos.length > 0
+
   // ── Lançamentos internos sem correspondência no extrato (INTERNO→EXTRATO) ─
   const lancamentosSemExtrato = useMemo(() => {
     if (!hasCsvPeriodo || !hasLanc) return []
     const matchedIds = new Set(resultados.filter(r => r.match).map(r => r.match.id))
     return lancamentos.filter(l => !matchedIds.has(l.id))
   }, [resultados, lancamentos, hasCsvPeriodo, hasLanc])
-
-  const hasData = Boolean(csvData?.items?.length)
-  const hasCsvPeriodo = csvItemsFiltrados.length > 0
-  const hasLanc = lancamentos.length > 0
 
   const totalAtivos   = resultadosComStatus.filter(r => r.effStatus !== 'ignorado').length
   const pctConciliado = totalAtivos ? Math.round((contagens.conciliados / totalAtivos) * 100) : 0
