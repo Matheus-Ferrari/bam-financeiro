@@ -653,6 +653,134 @@ function ModalCriarLancamento({ csvItem, onClose, onSaved }) {
   )
 }
 
+// ── TabelaLinhaInversa ────────────────────────────────────────────────────
+// Linha da tabela INTERNO→EXTRATO (perspectiva do lançamento interno)
+
+const STATUS_INV_COLOR = {
+  conciliado: GREEN,
+  match:      '#818CF8',
+  divergente: '#F59E0B',
+  sem_match:  '#EF4444',
+  ignorado:   '#374151',
+  ajuste:     '#818CF8',
+}
+
+function TabelaLinhaInversa({ entry, effStatus, onAction, onVincular }) {
+  const { lanc, resultado } = entry
+  const csvItem = resultado?.csvItem ?? null
+  const div = resultado?.divergencia ?? null
+
+  const borderColor = STATUS_INV_COLOR[effStatus] ?? BORDER
+  const valorDif = csvItem ? (csvItem.amount - lanc.amount) : null
+
+  return (
+    <tr className="border-b transition-all hover:bg-white/[0.02]"
+        style={{ borderColor: BORDER, borderLeft: `3px solid ${borderColor}` }}>
+      {/* Data interna */}
+      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDate(lanc.date)}</td>
+      {/* Descrição interna */}
+      <td className="px-3 py-2.5 text-xs max-w-[160px]">
+        <span className="truncate block text-white" title={lanc.description}>{lanc.description || '—'}</span>
+        {lanc.cliente && <span className="text-[10px] text-gray-600">{lanc.cliente}</span>}
+      </td>
+      {/* Tipo */}
+      <td className="px-3 py-2.5 text-[11px] font-medium whitespace-nowrap"
+          style={{ color: lanc.type === 'entrada' ? GREEN : '#EF4444' }}>
+        {lanc.type === 'entrada' ? '↑ Entrada' : '↓ Saída'}
+      </td>
+      {/* Valor interno */}
+      <td className="px-3 py-2.5 text-xs text-right font-mono font-medium whitespace-nowrap"
+          style={{ color: lanc.type === 'entrada' ? GREEN : '#EF4444' }}>
+        {lanc.type === 'saida' ? '-' : ''}{formatCurrency(lanc.amount)}
+      </td>
+      {/* Match no extrato — descrição */}
+      <td className="px-3 py-2.5 text-xs max-w-[160px]">
+        {csvItem
+          ? <span className="truncate block text-gray-300" title={csvItem.description}>{csvItem.description}</span>
+          : <span className="text-gray-600 italic">sem match</span>
+        }
+      </td>
+      {/* Data extrato */}
+      <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">
+        {csvItem
+          ? <span style={div?.diffDias > 0 ? { color: '#F59E0B' } : {}}>{formatDate(csvItem.date)}{div?.diffDias > 0 ? ` (${div.diffDias}d)` : ''}</span>
+          : '—'
+        }
+      </td>
+      {/* Valor extrato */}
+      <td className="px-3 py-2.5 text-xs text-right font-mono whitespace-nowrap">
+        {csvItem
+          ? <span style={Math.abs(valorDif) > 0.01 ? { color: '#F59E0B' } : { color: '#9CA3AF' }}>
+              {formatCurrency(csvItem.amount)}
+            </span>
+          : '—'
+        }
+      </td>
+      {/* Diferença */}
+      <td className="px-3 py-2.5 text-xs text-right font-mono whitespace-nowrap">
+        {valorDif != null
+          ? <span style={{ color: Math.abs(valorDif) < 0.01 ? GREEN : '#F59E0B' }}>
+              {valorDif > 0 ? '+' : ''}{formatCurrency(valorDif)}
+            </span>
+          : '—'
+        }
+      </td>
+      {/* Status badge */}
+      <td className="px-3 py-2.5">
+        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+              style={{ background: (STATUS_INV_COLOR[effStatus] ?? '#374151') + '22', color: STATUS_INV_COLOR[effStatus] ?? '#6B7280' }}>
+          {effStatus === 'conciliado' ? 'Conciliado'
+            : effStatus === 'match'      ? 'Match'
+            : effStatus === 'divergente' ? 'Divergência'
+            : effStatus === 'ignorado'   ? 'Ignorado'
+            : effStatus === 'ajuste'     ? 'Ajuste'
+            : 'Sem match'}
+        </span>
+      </td>
+      {/* Ações */}
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1 flex-wrap">
+          {effStatus !== 'conciliado' && csvItem && (
+            <button onClick={() => onAction(lanc.id, 'conciliado', entry)}
+              className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-[#12F0C6]/10 whitespace-nowrap"
+              style={{ borderColor: GREEN + '66', color: GREEN }}>
+              ✓ Conciliar
+            </button>
+          )}
+          {effStatus !== 'ignorado' && (
+            <button onClick={() => onAction(lanc.id, 'ignorado')}
+              className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-white/5 whitespace-nowrap"
+              style={{ borderColor: '#4B556344', color: '#6B7280' }}>
+              — Ignorar
+            </button>
+          )}
+          {effStatus !== 'ajuste' && (
+            <button onClick={() => onAction(lanc.id, 'ajuste')}
+              className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-purple-500/10 whitespace-nowrap"
+              style={{ borderColor: '#818CF844', color: '#818CF8' }}>
+              Aj Ajuste
+            </button>
+          )}
+          {(effStatus === 'ignorado' || effStatus === 'ajuste') && (
+            <button onClick={() => onAction(lanc.id, 'desfazer')}
+              className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-white/5 whitespace-nowrap"
+              style={{ borderColor: '#4B556344', color: '#9CA3AF' }}>
+              ↩ Desfazer
+            </button>
+          )}
+          {!csvItem && (
+            <button onClick={() => onVincular(lanc)}
+              className="px-2 py-0.5 rounded text-[10px] border transition-colors hover:bg-blue-500/10 whitespace-nowrap"
+              style={{ borderColor: '#3B82F644', color: '#60A5FA' }}>
+              ↩ Vincular
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════════════
@@ -673,6 +801,9 @@ export default function Conciliacao() {
 
   // ── Modal criar lançamento ──────────────────────────────────────────────
   const [modalCriarLanc, setModalCriarLanc] = useState(null) // csvItem | null
+
+  // ── Overrides locais para visão INTERNO→EXTRATO ──────────────────────
+  const [invOverrides, setInvOverrides] = useState({}) // {[lancId]: 'ignorado'|'ajuste'|'conciliado'}
 
   // ── Estado de gravação Firebase ───────────────────────────────────────
   const [savingIds,  setSavingIds]  = useState(new Set())
@@ -1052,6 +1183,26 @@ export default function Conciliacao() {
     }
   }, [applyOverride, executarConciliarFirebase])
 
+  // ── Ações para visão INTERNO→EXTRATO ──────────────────────────────────
+  const invAction = useCallback(async (lancId, action, entry) => {
+    if (action === 'desfazer') {
+      setInvOverrides(prev => { const n = { ...prev }; delete n[lancId]; return n })
+      return
+    }
+    if (action === 'conciliado' && entry?.resultado?.csvItem) {
+      // Grava conciliação no Firebase
+      try {
+        await salvarConciliacao({ lancamentoId: String(lancId), csvItem: entry.resultado.csvItem })
+        await carregarLancamentos()
+      } catch (e) {
+        alert('Erro ao conciliar: ' + (e?.response?.data?.detail ?? e.message))
+      }
+      return
+    }
+    // Overrides locais (ignorado, ajuste)
+    setInvOverrides(prev => ({ ...prev, [lancId]: action }))
+  }, [carregarLancamentos])
+
   const salvarEdicaoDiv = useCallback(async (match) => {
     if (!match?.id) return
     setEditSavingDiv(true)
@@ -1094,12 +1245,35 @@ export default function Conciliacao() {
   const hasCsvPeriodo = csvItemsFiltrados.length > 0
   const hasLanc = lancamentos.length > 0
 
-  // ── Lançamentos internos sem correspondência no extrato (INTERNO→EXTRATO) ─
-  const lancamentosSemExtrato = useMemo(() => {
-    if (!hasCsvPeriodo || !hasLanc) return []
-    const matchedIds = new Set(resultados.filter(r => r.match).map(r => r.match.id))
-    return lancamentos.filter(l => !matchedIds.has(l.id))
-  }, [resultados, lancamentos, hasCsvPeriodo, hasLanc])
+  // ── Limites de período a partir dos itens CSV filtrados ──────────────
+  const csvPeriodMin = useMemo(() =>
+    csvItemsFiltrados.length ? csvItemsFiltrados.reduce((m, i) => i.date < m ? i.date : m, csvItemsFiltrados[0].date) : null,
+    [csvItemsFiltrados]
+  )
+  const csvPeriodMax = useMemo(() =>
+    csvItemsFiltrados.length ? csvItemsFiltrados.reduce((m, i) => i.date > m ? i.date : m, csvItemsFiltrados[0].date) : null,
+    [csvItemsFiltrados]
+  )
+
+  // ── Visão inversa INTERNO→EXTRATO ─────────────────────────────────────
+  const resultadosInversos = useMemo(() => {
+    if (!hasCsvPeriodo || !hasLanc) return { noPeriodo: [], foraPeriodo: [] }
+    // Mapa: lancamentoId → resultado (do sentido EXTRATO→INTERNO)
+    const matchMap = new Map()
+    for (const r of resultados) {
+      if (r.match?.id) matchMap.set(r.match.id, r)
+    }
+    const noPeriodo = []
+    const foraPeriodo = []
+    for (const l of lancamentos) {
+      const isInPeriod = csvPeriodMin && csvPeriodMax && l.date >= csvPeriodMin && l.date <= csvPeriodMax
+      const resultado = matchMap.get(l.id) ?? null
+      const entry = { lanc: l, resultado, isInPeriod: Boolean(isInPeriod) }
+      if (isInPeriod) noPeriodo.push(entry)
+      else foraPeriodo.push(entry)
+    }
+    return { noPeriodo, foraPeriodo }
+  }, [resultados, lancamentos, hasCsvPeriodo, hasLanc, csvPeriodMin, csvPeriodMax])
 
   const totalAtivos   = resultadosComStatus.filter(r => r.effStatus !== 'ignorado').length
   const pctConciliado = totalAtivos ? Math.round((contagens.conciliados / totalAtivos) * 100) : 0
@@ -1553,73 +1727,100 @@ export default function Conciliacao() {
       )}
 
       {/* ── Visão INTERNO → EXTRATO ──────────────────────────────────── */}
-      {hasCsvPeriodo && hasLanc && (
-        <Card
-          title={`Visão INTERNO → EXTRATO${lancamentosSemExtrato.length > 0 ? ` (⚠ ${lancamentosSemExtrato.length} sem correspondência)` : ''}`}
-          subtitle="Lançamentos internos que não possuem correspondência no extrato CSV carregado"
-        >
-          {lancamentosSemExtrato.length === 0 ? (
-            <div className="py-8 text-center">
-              <CheckCircle2 size={28} className="mx-auto mb-2" style={{ color: GREEN }} />
-              <p className="text-sm font-medium" style={{ color: GREEN }}>Todos os lançamentos internos possuem correspondência no extrato!</p>
-              <p className="text-xs text-gray-600 mt-1">Nenhum lançamento interno ficou de fora da conciliação.</p>
-            </div>
-          ) : (
-            <>
-              <p className="text-[11px] text-gray-500 mb-3">
-                Esses lançamentos existem no sistema mas não aparecem no extrato do período.
-                Pode indicar: lançamentos futuros, ainda não processados pelo banco, ou
-                lançamentos fora do período coberto pelo CSV.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs min-w-[700px]">
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                      {['Data', 'Descrição', 'Tipo', 'Valor', 'Status', 'Categoria', 'Origem'].map(h => (
-                        <th key={h} className="px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lancamentosSemExtrato.map(l => (
-                      <tr key={l.id} className="border-b transition-all"
-                          style={{ borderColor: BORDER, borderLeft: '3px solid #EF4444' }}>
-                        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDate(l.date)}</td>
-                        <td className="px-3 py-2.5 text-xs max-w-[200px]">
-                          <span className="truncate block text-white" title={l.description}>{l.description || '—'}</span>
-                          {l.cliente && <span className="text-[10px] text-gray-600">{l.cliente}</span>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="text-[11px] font-medium"
-                                style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
-                            {l.type === 'entrada' ? '↑ Entrada' : '↓ Saída'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-right font-mono font-medium"
-                            style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
-                          {l.type === 'saida' ? '-' : ''}{formatCurrency(l.amount)}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <Badge
-                            variant={['pago', 'recebido', 'realizado', 'conciliado'].includes((l.status || '').toLowerCase()) ? 'success' : 'neutral'}
-                            dot>
-                            {l.status || '—'}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500">{l.categoria || '—'}</td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500">{l.origem || '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      {hasCsvPeriodo && hasLanc && (() => {
+        const { noPeriodo, foraPeriodo } = resultadosInversos
+        const semMatchNoPeriodo = noPeriodo.filter(e => !e.resultado || e.resultado.status === STATUS_CONC.SEM_MATCH).length
+        const totalNoPeriodo = noPeriodo.length
+        return (
+          <Card
+            title={`Visão INTERNO → EXTRATO${semMatchNoPeriodo > 0 ? ` (⚠ ${semMatchNoPeriodo} sem correspondência no período)` : ''}`}
+            subtitle="Lançamentos internos analisados do ponto de vista do extrato CSV"
+          >
+            {/* Seção: lançamentos dentro do período */}
+            {totalNoPeriodo === 0 ? (
+              <div className="py-6 text-center">
+                <CheckCircle2 size={28} className="mx-auto mb-2" style={{ color: GREEN }} />
+                <p className="text-sm font-medium" style={{ color: GREEN }}>Nenhum lançamento interno no período do extrato.</p>
               </div>
-              <p className="text-[10px] text-gray-600 mt-3">
-                {lancamentosSemExtrato.length} lançamento(s) interno(s) sem correspondência no extrato.
-              </p>
-            </>
-          )}
-        </Card>
-      )}
+            ) : (
+              <>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  <span className="font-medium text-gray-300">{totalNoPeriodo}</span> lançamentos internos dentro do período do CSV.
+                  {semMatchNoPeriodo > 0 && (
+                    <span style={{ color: '#EF4444' }}> {semMatchNoPeriodo} sem correspondência no extrato.</span>
+                  )}
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs min-w-[1100px]">
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                        {['Data int.','Descrição interna','Tipo','Valor int.','Match no extrato','Data extrato','Valor extrato','Diferença','Status','Ações'].map(h => (
+                          <th key={h} className="px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {noPeriodo.map(entry => {
+                        const eff = invOverrides[entry.lanc.id]
+                          ?? (entry.lanc.conciliado ? 'conciliado' : (entry.resultado?.status ?? STATUS_CONC.SEM_MATCH))
+                        return (
+                          <TabelaLinhaInversa
+                            key={entry.lanc.id}
+                            entry={entry}
+                            effStatus={eff}
+                            onAction={invAction}
+                            onVincular={() => {}}
+                          />
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {/* Seção: lançamentos fora do período — colapsável, informativa */}
+            {foraPeriodo.length > 0 && (
+              <details className="mt-5 border rounded-lg" style={{ borderColor: BORDER }}>
+                <summary className="cursor-pointer px-4 py-3 text-xs text-gray-500 hover:text-gray-300 transition-colors select-none flex items-center gap-2">
+                  <ChevronDown size={13} />
+                  {foraPeriodo.length} lançamento(s) fora do período do CSV (futuros ou de outro período) — apenas informativo
+                </summary>
+                <div className="overflow-x-auto px-2 pb-3">
+                  <table className="w-full text-left text-xs min-w-[700px] mt-2">
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                        {['Data','Descrição','Tipo','Valor','Status','Categoria','Origem'].map(h => (
+                          <th key={h} className="px-3 py-2 text-[10px] font-semibold text-gray-600 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {foraPeriodo.map(({ lanc: l }) => (
+                        <tr key={l.id} className="border-b" style={{ borderColor: BORDER, opacity: 0.6 }}>
+                          <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{formatDate(l.date)}</td>
+                          <td className="px-3 py-2 max-w-[200px]">
+                            <span className="truncate block text-gray-400" title={l.description}>{l.description || '—'}</span>
+                          </td>
+                          <td className="px-3 py-2 text-[11px]" style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
+                            {l.type === 'entrada' ? '↑ Entrada' : '↓ Saída'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-mono" style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
+                            {l.type === 'saida' ? '-' : ''}{formatCurrency(l.amount)}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{l.status || '—'}</td>
+                          <td className="px-3 py-2 text-gray-600">{l.categoria || '—'}</td>
+                          <td className="px-3 py-2 text-gray-600">{l.origem || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </Card>
+        )
+      })()}
 
       {/* ── Resultado final ───────────────────────────────────────────── */}
       {hasCsvPeriodo && hasLanc && (
