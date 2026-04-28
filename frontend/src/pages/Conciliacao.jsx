@@ -1079,6 +1079,29 @@ export default function Conciliacao() {
     }
   }, [mesInicio, mesFim, ano])
 
+  // ── Restaurar vínculos manuais do localStorage após F5 ───────────────
+  // Roda sempre que CSV e lançamentos estão disponíveis.
+  // Usa normalizedKey como chave estável (independente de Date.now()).
+
+  useEffect(() => {
+    if (!csvItemsFiltrados.length || !lancamentos.length) return
+    try {
+      const stored = JSON.parse(localStorage.getItem('bam_conciliacao_vinculos') || '{}')
+      if (!Object.keys(stored).length) return
+      const restored = {}
+      for (const csvItem of csvItemsFiltrados) {
+        const lancId = stored[csvItem.normalizedKey]
+        if (!lancId) continue
+        const lanc = lancamentos.find(l => l.id === lancId)
+        if (lanc) restored[csvItem.normalizedKey] = lanc
+      }
+      if (Object.keys(restored).length) {
+        // Existentes na sessão têm prioridade
+        setManualMatches(prev => ({ ...restored, ...prev }))
+      }
+    } catch (_) {}
+  }, [csvItemsFiltrados, lancamentos])
+
   // ── Upload CSV ────────────────────────────────────────────────────────
 
   const resetActions = useCallback(() => {
@@ -1141,11 +1164,15 @@ export default function Conciliacao() {
         }))
       : conciliarLista(csvItemsFiltrados, lancamentos)
 
-    // Aplicar vínculos manuais (sobrescrevem o auto-match)
+    // Aplicar vínculos manuais (sobrescrevem o auto-match, chave = normalizedKey)
     if (!Object.keys(manualMatches).length) return base
     return base.map(r => {
-      const manualLanc = manualMatches[r.csvItem.id]
+      const manualLanc = manualMatches[r.csvItem.normalizedKey]
       if (!manualLanc) return r
+      // Se já está conciliado no Firebase → mostra como conciliado
+      if (manualLanc.conciliado) {
+        return { csvItem: r.csvItem, status: 'conciliado', match: manualLanc, score: 1, divergencia: null }
+      }
       const diffValor = Math.round((r.csvItem.amount - manualLanc.amount) * 100) / 100
       const diffDias  = Math.round(
         Math.abs(new Date(r.csvItem.date) - new Date(manualLanc.date)) / 86_400_000
@@ -2099,9 +2126,25 @@ export default function Conciliacao() {
           csvItem={vincularManualItem}
           lancamentos={lancamentos}
           onClose={() => setVincularManualItem(null)}
-          onConfirm={lanc => {
-            setManualMatches(prev => ({ ...prev, [vincularManualItem.id]: lanc }))
+          onConfirm={async (lanc) => {
+            const csvItem = vincularManualItem
             setVincularManualItem(null)
+            // Persiste em localStorage (chave estável normalizedKey → lancamentoId)
+            try {
+              const VKEY = 'bam_conciliacao_vinculos'
+              const stored = JSON.parse(localStorage.getItem(VKEY) || '{}')
+              stored[csvItem.normalizedKey] = lanc.id
+              localStorage.setItem(VKEY, JSON.stringify(stored))
+            } catch (_) {}
+            // Atualiza estado local imediatamente (pré-reload)
+            setManualMatches(prev => ({ ...prev, [csvItem.normalizedKey]: lanc }))
+            // Salva no Firebase (marca como conciliado)
+            try {
+              await salvarConciliacao({ lancamentoId: String(lanc.id), csvItem })
+              await carregarLancamentos()
+            } catch (e) {
+              alert('Erro ao salvar vínculo: ' + (e?.response?.data?.detail ?? e.message))
+            }
           }}
         />
       )}
