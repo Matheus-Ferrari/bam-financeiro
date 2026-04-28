@@ -14,7 +14,7 @@ import {
   Upload, RefreshCw, AlertCircle, CheckCircle2, AlertTriangle,
   MinusCircle, XCircle, ChevronDown, ChevronUp, Info, FileText,
   ArrowUpCircle, ArrowDownCircle, Scale, Banknote, GitMerge,
-  EyeOff, Sparkles, Trash2, CheckSquare, Zap,
+  EyeOff, Sparkles, Trash2, CheckSquare, Zap, PlusCircle,
 } from 'lucide-react'
 
 import Card           from '../components/ui/Card'
@@ -224,7 +224,7 @@ function BulkActionBar({ count, totalVisible, onSelectAll, onClear, onConciliar,
 
 // ── Linha da tabela ───────────────────────────────────────────────────────
 
-function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved, onDeleteMatch }) {
+function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved, onDeleteMatch, onCriarLanc }) {
   const [open, setOpen] = useState(false)
   const [editando, setEditando] = useState(false)
   const [editForm, setEditForm] = useState({ valor: '', descricao: '', obs: '' })
@@ -366,6 +366,15 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
                   {deletingMatch ? '⋯' : '🗑'}
                 </button>
               )}
+              {effStatus === STATUS_CONC.SEM_MATCH && (
+                <button
+                  onClick={e => { e.stopPropagation(); onCriarLanc?.(csvItem) }}
+                  className="px-2 py-1 rounded text-[10px] border transition-colors hover:bg-[#12F0C6]/10 flex items-center gap-0.5"
+                  style={{ borderColor: GREEN + '77', color: GREEN }}
+                  title="Criar lançamento interno a partir deste item">
+                  <PlusCircle size={10} /> Criar
+                </button>
+              )}
             </div>
           )}
         </td>
@@ -476,6 +485,174 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
   )
 }
 
+// ── Modal: Criar lançamento interno a partir de item sem match no extrato ────
+
+function ModalCriarLancamento({ csvItem, onClose, onSaved }) {
+  const defaultStatus = csvItem.type === 'entrada' ? 'recebido' : 'pago'
+  const [form, setForm] = useState({
+    tipo:              csvItem.type === 'entrada' ? 'entrada' : 'saida',
+    data_competencia:  csvItem.date,
+    valor_previsto:    String(csvItem.amount),
+    valor_realizado:   String(csvItem.amount),
+    descricao:         csvItem.description,
+    categoria:         '',
+    status:            defaultStatus,
+    observacao:        `Criado via conciliação Nubank em ${new Date().toISOString().slice(0, 10)}`,
+  })
+  const [saving, setSaving] = useState(false)
+  const [err,    setErr]    = useState('')
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  async function salvar() {
+    if (!form.descricao.trim()) { setErr('Descrição é obrigatória.'); return }
+    if (!form.valor_previsto)   { setErr('Valor é obrigatório.');     return }
+    setSaving(true)
+    setErr('')
+    try {
+      const payload = {
+        data_competencia:    form.data_competencia,
+        descricao:           form.descricao.trim(),
+        categoria:           form.categoria.trim() || 'Conciliação Manual',
+        tipo:                form.tipo,
+        valor_previsto:      parseFloat(form.valor_previsto)  || 0,
+        valor_realizado:     parseFloat(form.valor_realizado) || 0,
+        status:              form.status,
+        origem:              'manual',
+        observacao:          form.observacao,
+        status_conciliacao:  'pendente',
+      }
+      await financeiroAPI.createLancamento(payload)
+      await onSaved()
+      onClose()
+    } catch (e) {
+      setErr(e?.response?.data?.detail ?? e.message ?? 'Erro ao criar lançamento')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.72)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="rounded-xl border w-full max-w-lg" style={{ background: '#141920', borderColor: GREEN + '44' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: BORDER }}>
+          <div>
+            <p className="text-sm font-semibold text-white flex items-center gap-2">
+              <PlusCircle size={15} style={{ color: GREEN }} />
+              Criar lançamento interno
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              A partir do extrato: <span className="text-gray-300">{csvItem.description}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-xl leading-none">×</button>
+        </div>
+
+        {/* Referência do extrato */}
+        <div className="px-5 pt-4">
+          <div className="rounded-lg p-3 mb-4 text-[11px] border" style={{ background: '#0D1012', borderColor: BORDER }}>
+            <p className="text-gray-500 mb-1">Dados do extrato (referência):</p>
+            <div className="flex gap-4 flex-wrap">
+              <span className="text-gray-300"><span className="text-gray-500">Data: </span>{formatDate(csvItem.date)}</span>
+              <span style={{ color: csvItem.type === 'entrada' ? GREEN : '#EF4444' }}>
+                <span className="text-gray-500">Valor: </span>
+                {csvItem.type === 'saida' ? '-' : ''}{formatCurrency(csvItem.amount)}
+              </span>
+              <span className="text-gray-300"><span className="text-gray-500">Tipo: </span>{csvItem.type === 'entrada' ? 'Entrada' : 'Saída'}</span>
+            </div>
+          </div>
+
+          {/* Formulário */}
+          <div className="grid grid-cols-2 gap-3 pb-4">
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Tipo *</label>
+              <select value={form.tipo} onChange={e => set('tipo', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white">
+                <option value="entrada">Entrada</option>
+                <option value="saida">Saída</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Data *</label>
+              <input type="date" value={form.data_competencia}
+                onChange={e => set('data_competencia', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Valor previsto (R$) *</label>
+              <input type="number" step="0.01" value={form.valor_previsto}
+                onChange={e => set('valor_previsto', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Valor realizado (R$)</label>
+              <input type="number" step="0.01" value={form.valor_realizado}
+                onChange={e => set('valor_realizado', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] text-gray-500 block mb-1">Descrição *</label>
+              <input type="text" value={form.descricao}
+                onChange={e => set('descricao', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Categoria</label>
+              <input type="text" value={form.categoria}
+                placeholder="Ex: Salário, Despesa Operacional…"
+                onChange={e => set('categoria', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white placeholder:text-gray-700" />
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 block mb-1">Status</label>
+              <select value={form.status} onChange={e => set('status', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white">
+                <option value="pago">Pago</option>
+                <option value="recebido">Recebido</option>
+                <option value="realizado">Realizado</option>
+                <option value="previsto">Previsto</option>
+                <option value="pendente">Pendente</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] text-gray-500 block mb-1">Observação / Origem</label>
+              <input type="text" value={form.observacao}
+                onChange={e => set('observacao', e.target.value)}
+                className="w-full bg-[#0D1012] border border-[#334155] rounded px-2 py-1.5 text-xs text-white" />
+            </div>
+          </div>
+
+          {err && (
+            <div className="mb-4 text-xs text-red-400 flex items-center gap-1.5 bg-red-900/20 rounded px-3 py-2">
+              <AlertCircle size={12} className="flex-shrink-0" /> {err}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t" style={{ borderColor: BORDER }}>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg text-xs border transition-colors hover:bg-white/5"
+            style={{ borderColor: '#374151', color: '#6B7280' }}>
+            Cancelar
+          </button>
+          <button onClick={salvar} disabled={saving}
+            className="px-4 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-90"
+            style={{ background: saving ? '#0A3028' : GREEN, color: '#000' }}>
+            {saving ? 'Salvando…' : 'Criar lançamento'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Componente principal
 // ═══════════════════════════════════════════════════════════════════════════
@@ -493,6 +670,9 @@ export default function Conciliacao() {
   const [lancamentos, setLancamentos] = useState([])
   const [lancLoading, setLancLoading] = useState(false)
   const [lancError,   setLancError]   = useState(null)
+
+  // ── Modal criar lançamento ──────────────────────────────────────────────
+  const [modalCriarLanc, setModalCriarLanc] = useState(null) // csvItem | null
 
   // ── Estado de gravação Firebase ───────────────────────────────────────
   const [savingIds,  setSavingIds]  = useState(new Set())
@@ -909,6 +1089,13 @@ export default function Conciliacao() {
     () => resultados.filter(r => r.status === STATUS_CONC.DIVERGENTE && r.divergencia),
     [resultados]
   )
+
+  // ── Lançamentos internos sem correspondência no extrato (INTERNO→EXTRATO) ─
+  const lancamentosSemExtrato = useMemo(() => {
+    if (!hasCsvPeriodo || !hasLanc) return []
+    const matchedIds = new Set(resultados.filter(r => r.match).map(r => r.match.id))
+    return lancamentos.filter(l => !matchedIds.has(l.id))
+  }, [resultados, lancamentos, hasCsvPeriodo, hasLanc])
 
   const hasData = Boolean(csvData?.items?.length)
   const hasCsvPeriodo = csvItemsFiltrados.length > 0
@@ -1330,6 +1517,7 @@ export default function Conciliacao() {
                       isSaving={savingIds.has(r.csvItem.id)}
                       saveError={saveErrors[r.csvItem.id] ?? null}
                       onLancamentoSaved={carregarLancamentos}
+                      onCriarLanc={setModalCriarLanc}
                     />
                   ))
                 )}
@@ -1360,6 +1548,75 @@ export default function Conciliacao() {
                 </div>
               )}
             </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Visão INTERNO → EXTRATO ──────────────────────────────────── */}
+      {hasCsvPeriodo && hasLanc && (
+        <Card
+          title={`Visão INTERNO → EXTRATO${lancamentosSemExtrato.length > 0 ? ` (⚠ ${lancamentosSemExtrato.length} sem correspondência)` : ''}`}
+          subtitle="Lançamentos internos que não possuem correspondência no extrato CSV carregado"
+        >
+          {lancamentosSemExtrato.length === 0 ? (
+            <div className="py-8 text-center">
+              <CheckCircle2 size={28} className="mx-auto mb-2" style={{ color: GREEN }} />
+              <p className="text-sm font-medium" style={{ color: GREEN }}>Todos os lançamentos internos possuem correspondência no extrato!</p>
+              <p className="text-xs text-gray-600 mt-1">Nenhum lançamento interno ficou de fora da conciliação.</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-[11px] text-gray-500 mb-3">
+                Esses lançamentos existem no sistema mas não aparecem no extrato do período.
+                Pode indicar: lançamentos futuros, ainda não processados pelo banco, ou
+                lançamentos fora do período coberto pelo CSV.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[700px]">
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                      {['Data', 'Descrição', 'Tipo', 'Valor', 'Status', 'Categoria', 'Origem'].map(h => (
+                        <th key={h} className="px-3 py-2.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lancamentosSemExtrato.map(l => (
+                      <tr key={l.id} className="border-b transition-all"
+                          style={{ borderColor: BORDER, borderLeft: '3px solid #EF4444' }}>
+                        <td className="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap">{formatDate(l.date)}</td>
+                        <td className="px-3 py-2.5 text-xs max-w-[200px]">
+                          <span className="truncate block text-white" title={l.description}>{l.description || '—'}</span>
+                          {l.cliente && <span className="text-[10px] text-gray-600">{l.cliente}</span>}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-[11px] font-medium"
+                                style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
+                            {l.type === 'entrada' ? '↑ Entrada' : '↓ Saída'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-right font-mono font-medium"
+                            style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
+                          {l.type === 'saida' ? '-' : ''}{formatCurrency(l.amount)}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Badge
+                            variant={['pago', 'recebido', 'realizado', 'conciliado'].includes((l.status || '').toLowerCase()) ? 'success' : 'neutral'}
+                            dot>
+                            {l.status || '—'}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{l.categoria || '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{l.origem || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-gray-600 mt-3">
+                {lancamentosSemExtrato.length} lançamento(s) interno(s) sem correspondência no extrato.
+              </p>
+            </>
           )}
         </Card>
       )}
@@ -1411,6 +1668,15 @@ export default function Conciliacao() {
         onIgnorar={bulkIgnorar}
         onAjuste={bulkAjuste}
       />
+
+      {/* ── Modal: criar lançamento interno a partir do extrato ─────── */}
+      {modalCriarLanc && (
+        <ModalCriarLancamento
+          csvItem={modalCriarLanc}
+          onClose={() => setModalCriarLanc(null)}
+          onSaved={carregarLancamentos}
+        />
+      )}
 
     </div>
   )
