@@ -1079,29 +1079,6 @@ export default function Conciliacao() {
     }
   }, [mesInicio, mesFim, ano])
 
-  // ── Restaurar vínculos manuais do localStorage após F5 ───────────────
-  // Roda sempre que CSV e lançamentos estão disponíveis.
-  // Usa normalizedKey como chave estável (independente de Date.now()).
-
-  useEffect(() => {
-    if (!csvItemsFiltrados.length || !lancamentos.length) return
-    try {
-      const stored = JSON.parse(localStorage.getItem('bam_conciliacao_vinculos') || '{}')
-      if (!Object.keys(stored).length) return
-      const restored = {}
-      for (const csvItem of csvItemsFiltrados) {
-        const lancId = stored[csvItem.normalizedKey]
-        if (!lancId) continue
-        const lanc = lancamentos.find(l => l.id === lancId)
-        if (lanc) restored[csvItem.normalizedKey] = lanc
-      }
-      if (Object.keys(restored).length) {
-        // Dados frescos do Firebase têm prioridade sobre estado de sessão
-        setManualMatches(prev => ({ ...prev, ...restored }))
-      }
-    } catch (_) {}
-  }, [csvItemsFiltrados, lancamentos])
-
   // ── Upload CSV ────────────────────────────────────────────────────────
 
   const resetActions = useCallback(() => {
@@ -1147,6 +1124,28 @@ export default function Conciliacao() {
     const fim    = `${ano}-${String(mesFim).padStart(2, '0')}-31`
     return csvData.items.filter(item => item.date >= inicio && item.date <= fim)
   }, [csvData, mesInicio, mesFim, ano])
+
+  // ── Restaurar vínculos manuais do localStorage após F5 ───────────────
+  // Colocado APÓS csvItemsFiltrados para evitar TDZ (const avaliado no dep array).
+
+  useEffect(() => {
+    if (!csvItemsFiltrados.length || !lancamentos.length) return
+    try {
+      const stored = JSON.parse(localStorage.getItem('bam_conciliacao_vinculos') || '{}')
+      if (!Object.keys(stored).length) return
+      const restored = {}
+      for (const csvItem of csvItemsFiltrados) {
+        const lancId = stored[csvItem.normalizedKey]
+        if (!lancId) continue
+        const lanc = lancamentos.find(l => l.id === lancId)
+        if (lanc) restored[csvItem.normalizedKey] = lanc
+      }
+      if (Object.keys(restored).length) {
+        // Dados frescos do Firebase têm prioridade sobre estado de sessão
+        setManualMatches(prev => ({ ...prev, ...restored }))
+      }
+    } catch (_) {}
+  }, [csvItemsFiltrados, lancamentos])
 
   // ── Resultados de matching ────────────────────────────────────────────
 
