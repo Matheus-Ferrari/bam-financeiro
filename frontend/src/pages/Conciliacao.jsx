@@ -1096,8 +1096,8 @@ export default function Conciliacao() {
         if (lanc) restored[csvItem.normalizedKey] = lanc
       }
       if (Object.keys(restored).length) {
-        // Existentes na sessão têm prioridade
-        setManualMatches(prev => ({ ...restored, ...prev }))
+        // Dados frescos do Firebase têm prioridade sobre estado de sessão
+        setManualMatches(prev => ({ ...prev, ...restored }))
       }
     } catch (_) {}
   }, [csvItemsFiltrados, lancamentos])
@@ -2141,6 +2141,8 @@ export default function Conciliacao() {
             // Salva no Firebase (marca como conciliado)
             try {
               await salvarConciliacao({ lancamentoId: String(lanc.id), csvItem })
+              // Marca conciliado no estado local imediatamente — não espera reload
+              setManualMatches(prev => ({ ...prev, [csvItem.normalizedKey]: { ...lanc, conciliado: true } }))
               await carregarLancamentos()
             } catch (e) {
               alert('Erro ao salvar vínculo: ' + (e?.response?.data?.detail ?? e.message))
