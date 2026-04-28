@@ -224,7 +224,7 @@ function BulkActionBar({ count, totalVisible, onSelectAll, onClear, onConciliar,
 
 // ── Linha da tabela ───────────────────────────────────────────────────────
 
-function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved, onDeleteMatch, onCriarLanc }) {
+function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onAction, isSaving, saveError, onLancamentoSaved, onDeleteMatch, onCriarLanc, onVincularManual }) {
   const [open, setOpen] = useState(false)
   const [editando, setEditando] = useState(false)
   const [editForm, setEditForm] = useState({ valor: '', descricao: '', obs: '' })
@@ -375,6 +375,15 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
                   <PlusCircle size={10} /> Criar
                 </button>
               )}
+              {(effStatus === STATUS_CONC.SEM_MATCH || effStatus === STATUS_CONC.DIVERGENTE) && (
+                <button
+                  onClick={e => { e.stopPropagation(); onVincularManual?.(csvItem) }}
+                  className="px-2 py-1 rounded text-[10px] border transition-colors hover:bg-blue-500/10 flex items-center gap-0.5"
+                  style={{ borderColor: '#3B82F644', color: '#60A5FA' }}
+                  title="Vincular manualmente a um lançamento interno existente">
+                  <GitMerge size={10} /> Vincular
+                </button>
+              )}
             </div>
           )}
         </td>
@@ -482,6 +491,181 @@ function TabelaLinha({ resultado, effStatus, isSelected, onToggleSelect, onActio
         </tr>
       )}
     </>
+  )
+}
+
+// ── Modal: Vincular manualmente item CSV a lançamento interno ────────────────
+
+function ModalVincularManual({ csvItem, lancamentos, onClose, onConfirm }) {
+  const [busca, setBusca] = useState('')
+  const [selecionado, setSelecionado] = useState(null)
+
+  const filtrados = useMemo(() => {
+    const q = busca.toLowerCase()
+    return lancamentos
+      .filter(l => {
+        if (!q) return true
+        return (
+          l.description.toLowerCase().includes(q) ||
+          l.cliente.toLowerCase().includes(q) ||
+          l.categoria.toLowerCase().includes(q)
+        )
+      })
+      .sort((a, b) => {
+        const aComp = a.type === csvItem.type ? -1 : 1
+        const bComp = b.type === csvItem.type ? -1 : 1
+        if (aComp !== bComp) return aComp - bComp
+        return Math.abs(a.amount - csvItem.amount) - Math.abs(b.amount - csvItem.amount)
+      })
+  }, [lancamentos, busca, csvItem])
+
+  const diffValor = selecionado
+    ? Math.round((csvItem.amount - selecionado.amount) * 100) / 100
+    : null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.72)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="rounded-xl border w-full max-w-2xl flex flex-col"
+           style={{ background: '#141920', borderColor: '#3B82F644', maxHeight: '82vh' }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
+             style={{ borderColor: BORDER }}>
+          <div>
+            <p className="text-sm font-semibold text-white flex items-center gap-2">
+              <GitMerge size={15} style={{ color: '#60A5FA' }} />
+              Vincular manualmente ao lançamento interno
+            </p>
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              Extrato: <span className="text-gray-300">{csvItem.description}</span>
+              {' · '}
+              <span style={{ color: csvItem.type === 'entrada' ? GREEN : '#EF4444' }}>
+                {formatCurrency(csvItem.amount)}
+              </span>
+              {' · '}{formatDate(csvItem.date)}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-xl leading-none">×</button>
+        </div>
+
+        {/* Busca */}
+        <div className="px-5 pt-4 pb-2 flex-shrink-0">
+          <input
+            autoFocus
+            type="text"
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar por descrição, cliente, categoria…"
+            className="w-full bg-[#0D1012] border border-[#334155] rounded-lg px-3 py-2 text-xs text-white placeholder:text-gray-700 focus:outline-none focus:border-blue-500/50"
+          />
+          <p className="text-[10px] text-gray-600 mt-1.5">
+            {filtrados.length} lançamento(s) — ordenados por compatibilidade de tipo e valor.
+          </p>
+        </div>
+
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-1.5" style={{ minHeight: 0 }}>
+          {filtrados.map(l => {
+            const diff = Math.round((csvItem.amount - l.amount) * 100) / 100
+            const isSelected = selecionado?.id === l.id
+            const isSameType = l.type === csvItem.type
+            return (
+              <div
+                key={l.id}
+                onClick={() => setSelecionado(isSelected ? null : l)}
+                className="rounded-lg border p-3 cursor-pointer transition-all"
+                style={{
+                  borderColor: isSelected ? '#3B82F6' : isSameType ? BORDER : '#1F2937',
+                  background: isSelected ? '#0D1C3A' : '#0D1012',
+                  opacity: isSameType ? 1 : 0.6,
+                }}
+              >
+                <div className="flex items-center gap-2 justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white truncate">{l.description || '—'}</p>
+                    <div className="flex gap-3 mt-0.5 flex-wrap">
+                      <span className="text-[10px] text-gray-500">{formatDate(l.date)}</span>
+                      {l.cliente    && <span className="text-[10px] text-gray-600">{l.cliente}</span>}
+                      {l.categoria  && <span className="text-[10px] text-gray-600">{l.categoria}</span>}
+                      {l.origem     && <span className="text-[10px] text-gray-600 capitalize">{l.origem}</span>}
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs font-mono font-bold"
+                       style={{ color: l.type === 'entrada' ? GREEN : '#EF4444' }}>
+                      {l.type === 'saida' ? '-' : ''}{formatCurrency(l.amount)}
+                    </p>
+                    {Math.abs(diff) > 0.01 && (
+                      <p className="text-[10px] font-mono" style={{ color: '#F59E0B' }}>
+                        dif: {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+                      </p>
+                    )}
+                    <p className="text-[10px] capitalize mt-0.5"
+                       style={{ color: l.conciliado ? GREEN : '#6B7280' }}>
+                      {l.conciliado ? 'Conciliado' : l.status}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {filtrados.length === 0 && (
+            <p className="text-center text-xs text-gray-600 py-6">Nenhum lançamento encontrado.</p>
+          )}
+        </div>
+
+        {/* Preview da diferença */}
+        {selecionado && (
+          <div className="px-5 py-3 border-t flex-shrink-0" style={{ borderColor: BORDER }}>
+            <div className="rounded-lg p-3 text-[11px] border"
+                 style={{
+                   background: '#0F0E09',
+                   borderColor: Math.abs(diffValor) > 0.01 ? '#F59E0B33' : GREEN + '33',
+                 }}>
+              <p className="font-semibold mb-1.5"
+                 style={{ color: Math.abs(diffValor) > 0.01 ? '#F59E0B' : GREEN }}>
+                {Math.abs(diffValor) > 0.01 ? '⚠ Diferença de valor — será registrada como divergência' : '✓ Valores iguais'}
+              </p>
+              <div className="flex gap-6 flex-wrap text-[10px] text-gray-400">
+                <span>Extrato (CSV): <strong className="text-white">{formatCurrency(csvItem.amount)}</strong></span>
+                <span>Interno: <strong className="text-white">{formatCurrency(selecionado.amount)}</strong></span>
+                {Math.abs(diffValor) > 0.01 && (
+                  <span style={{ color: '#F59E0B' }}>
+                    Diferença: <strong>{diffValor > 0 ? '+' : ''}{formatCurrency(diffValor)}</strong>
+                  </span>
+                )}
+              </div>
+              {Math.abs(diffValor) > 0.01 && (
+                <p className="text-[10px] text-gray-600 mt-1.5">
+                  Você ainda poderá conciliar normalmente. A divergência ficará registrada para auditoria.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t flex-shrink-0"
+             style={{ borderColor: BORDER }}>
+          <button onClick={onClose}
+            className="px-4 py-2 rounded-lg text-xs border transition-colors hover:bg-white/5"
+            style={{ borderColor: '#374151', color: '#6B7280' }}>
+            Cancelar
+          </button>
+          <button
+            onClick={() => selecionado && onConfirm(selecionado)}
+            disabled={!selecionado}
+            className="px-4 py-2 rounded-lg text-xs font-semibold transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: '#1E40AF', color: '#93C5FD' }}>
+            Vincular lançamento selecionado
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -802,6 +986,10 @@ export default function Conciliacao() {
   // ── Modal criar lançamento ──────────────────────────────────────────────
   const [modalCriarLanc, setModalCriarLanc] = useState(null) // csvItem | null
 
+  // ── Vincular manual ────────────────────────────────────────────────────
+  const [vincularManualItem, setVincularManualItem] = useState(null) // csvItem | null
+  const [manualMatches, setManualMatches] = useState({})             // { [csvItemId]: lancamento }
+
   // ── Overrides locais para visão INTERNO→EXTRATO ──────────────────────
   const [invOverrides, setInvOverrides] = useState({}) // {[lancId]: 'ignorado'|'ajuste'|'conciliado'}
 
@@ -898,6 +1086,8 @@ export default function Conciliacao() {
     setSelectedIds({})
     setIgnoradosData({})
     setSaveErrors({})
+    setManualMatches({})
+    setVincularManualItem(null)
   }, [])
 
   const handleFile = useCallback(async (file) => {
@@ -941,17 +1131,49 @@ export default function Conciliacao() {
     if (!csvItemsFiltrados.length) return []
     // Sem lançamentos: exibe todos os itens do CSV como 'sem_match'
     // para que a tabela fique populada logo após o upload do CSV.
-    if (!lancamentos.length) {
-      return csvItemsFiltrados.map(item => ({
-        csvItem:    item,
-        status:     STATUS_CONC.SEM_MATCH,
-        match:      null,
-        score:      0,
-        divergencia: null,
-      }))
-    }
-    return conciliarLista(csvItemsFiltrados, lancamentos)
-  }, [csvItemsFiltrados, lancamentos])
+    const base = !lancamentos.length
+      ? csvItemsFiltrados.map(item => ({
+          csvItem:     item,
+          status:      STATUS_CONC.SEM_MATCH,
+          match:       null,
+          score:       0,
+          divergencia: null,
+        }))
+      : conciliarLista(csvItemsFiltrados, lancamentos)
+
+    // Aplicar vínculos manuais (sobrescrevem o auto-match)
+    if (!Object.keys(manualMatches).length) return base
+    return base.map(r => {
+      const manualLanc = manualMatches[r.csvItem.id]
+      if (!manualLanc) return r
+      const diffValor = Math.round((r.csvItem.amount - manualLanc.amount) * 100) / 100
+      const diffDias  = Math.round(
+        Math.abs(new Date(r.csvItem.date) - new Date(manualLanc.date)) / 86_400_000
+      )
+      const status = Math.abs(diffValor) < 0.05 && diffDias <= 3
+        ? STATUS_CONC.MATCH
+        : STATUS_CONC.DIVERGENTE
+      return {
+        ...r,
+        status,
+        match: manualLanc,
+        score: 1,
+        divergencia: status === STATUS_CONC.DIVERGENTE ? {
+          dataCsv:      r.csvItem.date,
+          dataInterno:  manualLanc.date,
+          valorCsv:     r.csvItem.amount,
+          valorInterno: manualLanc.amount,
+          diffValor,
+          diffDias,
+          descricaoCsv: r.csvItem.description,
+          descricaoInt: manualLanc.description ?? '',
+          clienteInt:   manualLanc.cliente    ?? '',
+          categoriaInt: manualLanc.categoria  ?? '',
+          origemInt:    manualLanc.origem     ?? '',
+        } : null,
+      }
+    })
+  }, [csvItemsFiltrados, lancamentos, manualMatches])
 
   // Resultados enriquecidos com status efetivo
   const resultadosComStatus = useMemo(
@@ -1692,6 +1914,7 @@ export default function Conciliacao() {
                       saveError={saveErrors[r.csvItem.id] ?? null}
                       onLancamentoSaved={carregarLancamentos}
                       onCriarLanc={setModalCriarLanc}
+                      onVincularManual={setVincularManualItem}
                     />
                   ))
                 )}
@@ -1869,6 +2092,19 @@ export default function Conciliacao() {
         onIgnorar={bulkIgnorar}
         onAjuste={bulkAjuste}
       />
+
+      {/* ── Modal: vincular manualmente CSV ↔ lançamento interno ────── */}
+      {vincularManualItem && (
+        <ModalVincularManual
+          csvItem={vincularManualItem}
+          lancamentos={lancamentos}
+          onClose={() => setVincularManualItem(null)}
+          onConfirm={lanc => {
+            setManualMatches(prev => ({ ...prev, [vincularManualItem.id]: lanc }))
+            setVincularManualItem(null)
+          }}
+        />
+      )}
 
       {/* ── Modal: criar lançamento interno a partir do extrato ─────── */}
       {modalCriarLanc && (
