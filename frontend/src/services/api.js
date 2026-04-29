@@ -76,6 +76,10 @@ export const financeiroAPI = {
   updateLancamento:        (id, data) => api.post('/financeiro/lancamento/update', { lancamento_id: id, ...data }),
   createLancamento:        (data)    => api.post('/financeiro/lancamento/create', data),
   deleteLancamento:        (id)      => api.delete(`/financeiro/lancamento/${id}`),
+
+  // Precificação
+  getPrecificacao:         (params)  => api.get('/financeiro/precificacao', { params }),
+  classificarPrecificacao: (data)    => api.post('/financeiro/precificacao/classificar', data),
 }
 
 export const quickUpdateAPI = {

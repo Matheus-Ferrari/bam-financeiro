@@ -3,12 +3,14 @@ import { finService } from "../services/financeiro";
 import { SaudeService } from "../services/saude";
 import { OperacaoService } from "../services/operacao";
 import { FluxoCaixaService } from "../services/fluxoCaixa";
+import { PrecificacaoService } from "../services/precificacao";
 import { baseReceitasStorage, baseDespesasStorage } from "../lib/firestore";
 
 const router = Router();
 const saudeService = new SaudeService(finService);
 const opService = new OperacaoService(finService);
 const fluxoService = new FluxoCaixaService(finService);
+const precificacaoService = new PrecificacaoService(fluxoService);
 
 // ── Dados de base (Excel/Firestore) ──────────────────────────────────────
 
@@ -156,6 +158,26 @@ router.post("/lancamento/create", async (req, res) => {
 router.delete("/lancamento/:id", async (req, res) => {
   try {
     res.json(await fluxoService.deleteManual(req.params.id));
+  } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
+});
+
+// ── Precificação ──────────────────────────────────────────────────────
+
+// GET /financeiro/precificacao?mes=&ano=
+router.get("/precificacao", async (req, res) => {
+  try {
+    const { mes, ano } = req.query;
+    res.json(await precificacaoService.get({
+      mes: mes ? parseInt(String(mes)) : undefined,
+      ano: ano ? parseInt(String(ano)) : undefined,
+    }));
+  } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
+});
+
+// POST /financeiro/precificacao/classificar
+router.post("/precificacao/classificar", async (req, res) => {
+  try {
+    res.json(await precificacaoService.setClassificacao(req.body));
   } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
 });
 

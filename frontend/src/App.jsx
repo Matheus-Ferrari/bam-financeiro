@@ -19,6 +19,7 @@ import DespesasLocais      from './pages/DespesasLocais'
 import FluxoCaixa          from './pages/FluxoCaixa'
 import FechamentoMes       from './pages/FechamentoMes'
 import Conciliacao         from './pages/Conciliacao'
+import Precificacao        from './pages/Precificacao'
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="fluxo-caixa"           element={<FluxoCaixa />} />
             <Route path="fechamento"             element={<FechamentoMes />} />
             <Route path="conciliacao"            element={<Conciliacao />} />
+            <Route path="precificacao"           element={<Precificacao />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

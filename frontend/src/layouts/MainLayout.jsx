@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   LogOut,
   GitMerge,
+  Calculator,
 } from 'lucide-react'
 import { useHealth } from '../hooks/useFinanceiro'
 import { useAuth } from '../context/AuthContext'
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/clientes',    label: 'Clientes',          icon: Users           },
   { to: '/fechamento',  label: 'Fechamento do Mês', icon: CalendarCheck   },
   { to: '/conciliacao', label: 'Conciliação',        icon: GitMerge        },
+  { to: '/precificacao', label: 'Precificação',     icon: Calculator      },
   { to: '/saude',       label: 'Saúde Financeira',  icon: HeartPulse      },
   { to: '/configuracoes', label: 'Configurações',   icon: Settings        },
 ]
@@ -29,6 +31,7 @@ const PAGE_TITLES = {
   '/clientes':      'Clientes',
   '/fechamento':    'Fechamento do Mês',
   '/conciliacao':   'Conciliação',
+  '/precificacao':  'Precificação',
   '/saude':         'Saúde Financeira',
   '/configuracoes': 'Configurações',
 }
