@@ -363,8 +363,10 @@ export class FluxoCaixaService {
   private applyFieldOverrides(todos: Record<string, unknown>[], sm: Record<string, Record<string, unknown>>): Record<string, unknown>[] {
     const fields = ["data_competencia", "descricao", "cliente", "categoria", "tipo", "origem", "valor_previsto"];
     return todos.map((l) => {
-      if (l.fonte === "cliente") return l;
       const ov = sm[l.id as string] || {};
+      // Oculto: marcado para exclusão via override
+      if (ov.oculto === true) return { ...l, _oculto: true };
+      if (l.fonte === "cliente") return l;
       if (!Object.keys(ov).length) return l;
       const updated = { ...l };
       for (const f of fields) if (ov[f] != null) updated[f] = ov[f];
@@ -414,6 +416,8 @@ export class FluxoCaixaService {
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
     let todos = this.applyFieldOverrides([...deduped, ...cliLanc], sm);
+    // Filtrar ocultos (excluídos via override)
+    todos = todos.filter((l) => !l._oculto);
 
     if (mes) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(`${anoRef}-${String(mes).padStart(2, "0")}`));
     else if (ano) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(String(anoRef)));
@@ -464,6 +468,8 @@ export class FluxoCaixaService {
     const cliMonths = new Set(cliLanc.filter((l) => l.cliente).map((l) => `${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`));
     const deduped = excelLanc.filter((l) => !(String(l.id || "").startsWith("rec_") && l.cliente && cliMonths.has(`${norm(String(l.cliente))}|${String(l.data_competencia || "").slice(0, 7)}`)));
     let todos = this.applyFieldOverrides([...deduped, ...cliLanc], sm);
+    // Filtrar ocultos
+    todos = todos.filter((l) => !l._oculto);
 
     if (mes) todos = todos.filter((l) => String(l.data_competencia || "").startsWith(`${anoRef}-${String(mes).padStart(2, "0")}`));
 
@@ -552,6 +558,20 @@ export class FluxoCaixaService {
   }
 
   async deleteManual(id: string): Promise<Record<string, unknown>> {
+    // IDs de planilha (cli_, rec_, dep_): marcar como oculto via override
+    if (id.startsWith("cli_") || id.startsWith("rec_") || id.startsWith("dep_")) {
+      const sm = await this.statusMap();
+      const existing = sm[id];
+      const payload: Record<string, unknown> = {
+        lancamento_id: id,
+        oculto: true,
+        atualizado_em: new Date().toISOString(),
+      };
+      if (existing) await statusOverridesStorage.update(String(existing.id), { ...existing, ...payload, id: String(existing.id) });
+      else await statusOverridesStorage.create(payload);
+      return { ok: true, id };
+    }
+
     // Handle fechamento-based entries: fech_{competencia}_{1-based-index}
     if (id.startsWith("fech_")) {
       // ID format: fech_2026-04_15

@@ -916,16 +916,14 @@ function TabFluxo() {
                                 â†º
                               </button>
                             )}
-                            {(l.fonte === "manual" || l.fonte === "fechamento") && (
-                              <button
-                                disabled={deletingId === l.id}
-                                onClick={() => setConfirmDel(l)}
-                                className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
-                                style={{ background: "rgba(239,68,68,0.12)", color: "#EF4444" }}
-                                title="Excluir lançamento manual">
-                                <Trash2 size={10} />
-                              </button>
-                            )}
+                            <button
+                              disabled={deletingId === l.id}
+                              onClick={() => setConfirmDel(l)}
+                              className="px-2 py-1 rounded text-[10px] font-medium transition-opacity disabled:opacity-40"
+                              style={{ background: "rgba(239,68,68,0.12)", color: "#EF4444" }}
+                              title="Excluir lançamento">
+                              <Trash2 size={10} />
+                            </button>
                           </div>
                         )}
                       </td>
@@ -1078,7 +1076,7 @@ function TabFluxo() {
     {confirmDel && (() => {
       // find duplicates: same descricao + fonte deletável
       const dupIds = lancamentos
-        .filter(l => l.descricao === confirmDel.descricao && (l.fonte === 'manual' || l.fonte === 'fechamento') && l.id !== confirmDel.id)
+        .filter(l => l.descricao === confirmDel.descricao && l.id !== confirmDel.id)
         .map(l => l.id)
       return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
