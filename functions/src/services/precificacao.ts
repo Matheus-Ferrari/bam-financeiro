@@ -18,6 +18,11 @@ interface ClassificacaoDespesa {
   incluir_na_precificacao?: boolean;
 }
 
+interface ClienteSplit {
+  area: Area;
+  valor: number;
+}
+
 interface ClassificacaoCliente {
   id?: string;
   cliente_key: string;
@@ -28,6 +33,8 @@ interface ClassificacaoCliente {
   responsavel?: Responsavel;
   incluir_no_ticket?: boolean;
   observacao?: string;
+  oculto?: boolean;
+  splits?: ClienteSplit[];
 }
 
 const norm = (s: unknown): string =>
@@ -168,11 +175,20 @@ export class PrecificacaoService {
       responsavel: string;
       observacao: string;
       incluir_no_ticket: boolean;
+      oculto: boolean;
+      splits: ClienteSplit[];
     }
     const consolidados: Record<string, Consolidado> = {};
+    const ocultos: { cliente_key: string; cliente_original: string; valor: number }[] = [];
     for (const b of Object.values(buckets)) {
       const grupoKey = resolveGrupo(b.cliente_key);
       const clsGrupo = clienteMap[grupoKey] || {};
+      const clsOriginal = clienteMap[b.cliente_key] || {};
+      // Se o bucket original (não o grupo) está oculto, pular completamente
+      if (clsOriginal.oculto === true) {
+        ocultos.push({ cliente_key: b.cliente_key, cliente_original: b.cliente_original, valor: round2(b.valor) });
+        continue;
+      }
       if (!consolidados[grupoKey]) {
         const nomeFallback = buckets[grupoKey]?.cliente_original || b.cliente_original;
         consolidados[grupoKey] = {
@@ -187,6 +203,8 @@ export class PrecificacaoService {
           responsavel: clsGrupo.responsavel || "",
           observacao: clsGrupo.observacao || "",
           incluir_no_ticket: clsGrupo.incluir_no_ticket !== false,
+          oculto: clsGrupo.oculto === true,
+          splits: Array.isArray(clsGrupo.splits) ? clsGrupo.splits.filter((s) => s && s.area && Number(s.valor) > 0) : [],
         };
       }
       const c = consolidados[grupoKey];
@@ -198,6 +216,14 @@ export class PrecificacaoService {
       });
       c.valor += b.valor;
       c.previsto += b.previsto;
+    }
+
+    // Remove grupos cujo cliente raiz está oculto (caso o oculto esteja na chave do grupo)
+    for (const k of Object.keys(consolidados)) {
+      if (consolidados[k].oculto) {
+        ocultos.push({ cliente_key: k, cliente_original: consolidados[k].nome_exibido, valor: round2(consolidados[k].valor) });
+        delete consolidados[k];
+      }
     }
 
     // ── Cálculos agregados ────────────────────────────────────────────
@@ -218,12 +244,27 @@ export class PrecificacaoService {
     const custoPorArea: Record<string, number> = {};
     for (const a of areas) custoPorArea[a] = consideradasDespesas.filter((d) => d.area === a).reduce((s, d) => s + d.valor, 0);
 
-    // Receita por área
+    // Receita por área (com suporte a splits)
     const receitaPorArea: Record<string, number> = { TI: 0, Marketing: 0, Outros: 0, Misto: 0 };
     const qtdClientesPorArea: Record<string, number> = { TI: 0, Marketing: 0, Outros: 0, Misto: 0 };
     for (const c of Object.values(consolidados)) {
-      receitaPorArea[c.area] = (receitaPorArea[c.area] || 0) + c.valor;
-      qtdClientesPorArea[c.area] = (qtdClientesPorArea[c.area] || 0) + (c.valor > 0 ? 1 : 0);
+      if (c.splits && c.splits.length > 0) {
+        const somaSplits = c.splits.reduce((s, sp) => s + Number(sp.valor || 0), 0);
+        const areasContadas = new Set<string>();
+        for (const sp of c.splits) {
+          // Se a soma dos splits não bater com o valor recebido, ajusta proporcionalmente
+          const v = somaSplits > 0 ? (Number(sp.valor) / somaSplits) * c.valor : 0;
+          receitaPorArea[sp.area] = (receitaPorArea[sp.area] || 0) + v;
+          areasContadas.add(sp.area);
+        }
+        // Conta o cliente em cada área que aparece no split
+        if (c.valor > 0) {
+          for (const a of areasContadas) qtdClientesPorArea[a] = (qtdClientesPorArea[a] || 0) + 1;
+        }
+      } else {
+        receitaPorArea[c.area] = (receitaPorArea[c.area] || 0) + c.valor;
+        qtdClientesPorArea[c.area] = (qtdClientesPorArea[c.area] || 0) + (c.valor > 0 ? 1 : 0);
+      }
     }
 
     const resumoPorArea = areas.map((a) => {
@@ -266,6 +307,7 @@ export class PrecificacaoService {
           responsavel: c.responsavel,
           incluir_no_ticket: c.incluir_no_ticket,
           observacao: c.observacao,
+          splits: c.splits.map((s) => ({ area: s.area, valor: round2(Number(s.valor || 0)) })),
         };
       })
       .sort((a, b) => b.valor_recebido - a.valor_recebido);
@@ -278,11 +320,20 @@ export class PrecificacaoService {
     // Para gráfico (sem Misto)
     const porArea = (["TI", "Marketing", "Outros"] as Area[]).map((a) => ({ area: a, valor: round2(custoPorArea[a] || 0) }));
 
-    const tipos: TipoCusto[] = ["Salario", "Ferramenta", "Licenca", "Trafego", "Operacional", "Outro"];
-    const porTipo = tipos.map((t) => ({
-      tipo: t,
-      valor: round2(consideradasDespesas.filter((d) => d.tipo_custo === t).reduce((s, d) => s + d.valor, 0)),
-    }));
+    // Custos por tipo — Operacional é separado por área (Op. TI / Op. Marketing / Op. Outros)
+    const porTipoMap: Record<string, number> = {};
+    for (const d of consideradasDespesas) {
+      const key = d.tipo_custo === "Operacional" ? `Op. ${d.area}` : d.tipo_custo;
+      porTipoMap[key] = (porTipoMap[key] || 0) + d.valor;
+    }
+    const tipoOrder = ["Salario", "Ferramenta", "Licenca", "Trafego", "Op. TI", "Op. Marketing", "Op. Outros", "Op. Misto", "Outro"];
+    const porTipo = tipoOrder
+      .filter((t) => porTipoMap[t] !== undefined)
+      .map((t) => ({ tipo: t, valor: round2(porTipoMap[t] || 0) }));
+    // Inclui qualquer key extra que não esteja na ordem
+    for (const k of Object.keys(porTipoMap)) {
+      if (!tipoOrder.includes(k)) porTipo.push({ tipo: k, valor: round2(porTipoMap[k]) });
+    }
 
     return {
       resumo: {
@@ -300,6 +351,7 @@ export class PrecificacaoService {
       despesas,
       clientes: clientesTabela,
       clientes_brutos: clientesBrutos,
+      clientes_ocultos: ocultos.sort((a, b) => b.valor - a.valor),
     };
   }
 
@@ -339,6 +391,14 @@ export class PrecificacaoService {
     if (data.responsavel !== undefined) payload.responsavel = data.responsavel;
     if (data.incluir_no_ticket !== undefined) payload.incluir_no_ticket = data.incluir_no_ticket;
     if (data.observacao !== undefined) payload.observacao = data.observacao;
+    if (data.oculto !== undefined) payload.oculto = data.oculto === true;
+    if (data.splits !== undefined) {
+      payload.splits = Array.isArray(data.splits)
+        ? data.splits
+            .filter((s) => s && s.area)
+            .map((s) => ({ area: s.area, valor: Number(s.valor) || 0 }))
+        : [];
+    }
 
     if (existing && existing.id) {
       await precificacaoClientesStorage.update(String(existing.id), { ...existing, ...payload });
