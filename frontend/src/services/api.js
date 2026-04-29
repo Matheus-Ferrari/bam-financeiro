@@ -80,6 +80,7 @@ export const financeiroAPI = {
   // Precificação
   getPrecificacao:         (params)  => api.get('/financeiro/precificacao', { params }),
   classificarPrecificacao: (data)    => api.post('/financeiro/precificacao/classificar', data),
+  classificarCliente:      (data)    => api.post('/financeiro/precificacao/cliente', data),
 }
 
 export const quickUpdateAPI = {

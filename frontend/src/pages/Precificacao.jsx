@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   RefreshCw, DollarSign, TrendingUp, TrendingDown, Users, Calculator,
-  Percent, Wallet, PieChart as PieIcon, Save, Check,
+  Percent, Wallet, PieChart as PieIcon, Edit3, X, Check,
 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, ResponsiveContainer,
@@ -11,9 +11,12 @@ import { financeiroAPI } from '../services/api'
 import { formatCurrency, formatCompact, formatPercent } from '../utils/formatters'
 
 // ── Constantes ──────────────────────────────────────────────────────────
-const AREAS = ['TI', 'Marketing', 'Outros']
+const AREAS_CUSTO = ['TI', 'Marketing', 'Outros']
+const AREAS_CLIENTE = ['TI', 'Marketing', 'Outros', 'Misto']
 const TIPOS = ['Salario', 'Ferramenta', 'Licenca', 'Trafego', 'Operacional', 'Outro']
-const COR_AREA = { TI: '#12F0C6', Marketing: '#6366F1', Outros: '#F59E0B' }
+const TIPOS_SERVICO = ['Site', 'CRM', 'Trafego', 'SocialMedia', 'Design', 'Automacao', 'Suporte', 'Outro']
+const RESPONSAVEIS = ['Ferrari', 'Luan', 'Marketing', 'Outro']
+const COR_AREA = { TI: '#12F0C6', Marketing: '#6366F1', Outros: '#F59E0B', Misto: '#EC4899' }
 const COR_TIPO = {
   Salario: '#12F0C6', Ferramenta: '#6366F1', Licenca: '#8B5CF6',
   Trafego: '#EC4899', Operacional: '#F59E0B', Outro: '#9CA3AF',
@@ -25,7 +28,7 @@ const INPUT_CLS =
 const SELECT_INLINE_CLS =
   'px-2 py-1 rounded text-[11px] text-white bg-black/40 border border-white/10 focus:outline-none focus:border-[#12F0C6]/50'
 
-// ── Cards de resumo ─────────────────────────────────────────────────────
+// ── Cards ───────────────────────────────────────────────────────────────
 function SummaryCard({ icon: Icon, label, value, color, sub, loading }) {
   return (
     <div
@@ -46,7 +49,42 @@ function SummaryCard({ icon: Icon, label, value, color, sub, loading }) {
   )
 }
 
-// ── Tooltip custom ──────────────────────────────────────────────────────
+function AreaCard({ area, receita, custo, margem, margem_percentual, ticket_medio, qtd_clientes }) {
+  const cor = COR_AREA[area] || '#9CA3AF'
+  const margemPositiva = margem >= 0
+  return (
+    <div
+      className="rounded-xl border p-4 flex flex-col gap-2"
+      style={{ background: '#1A1E21', borderColor: cor + '40' }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: cor }}>{area}</span>
+        <span className="text-[10px] text-gray-500">{qtd_clientes} cli.</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <p className="text-gray-500">Receita</p>
+          <p className="text-white font-semibold">{formatCurrency(receita)}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Custo</p>
+          <p className="text-gray-300">{formatCurrency(custo)}</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Margem</p>
+          <p className="font-semibold" style={{ color: margemPositiva ? '#12F0C6' : '#EF4444' }}>
+            {formatCurrency(margem)} <span className="text-[10px]">({margem_percentual}%)</span>
+          </p>
+        </div>
+        <div>
+          <p className="text-gray-500">Ticket</p>
+          <p className="text-gray-300">{formatCurrency(ticket_medio)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
   return (
@@ -66,6 +104,151 @@ function ChartTooltip({ active, payload, label }) {
   )
 }
 
+// ── Modal Editar Cliente ────────────────────────────────────────────────
+function ModalEditarCliente({ cliente, clientesBrutos, onClose, onSave }) {
+  const [form, setForm] = useState({
+    nome_exibido: cliente.nome_exibido || '',
+    grupo: '',
+    area: cliente.area || 'Outros',
+    tipo_servico: cliente.tipo_servico || '',
+    responsavel: cliente.responsavel || '',
+    incluir_no_ticket: cliente.incluir_no_ticket !== false,
+    observacao: cliente.observacao || '',
+  })
+  const [salvando, setSalvando] = useState(false)
+
+  const submit = async () => {
+    setSalvando(true)
+    try {
+      await onSave({
+        cliente_key: cliente.cliente_key,
+        ...form,
+        // Se vazio "" no grupo → enviar null para limpar
+        grupo: form.grupo || '',
+      })
+      onClose()
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  // Lista de candidatos para "Agrupar com" — todos exceto o próprio
+  const candidatos = clientesBrutos.filter((b) => b.cliente_key !== cliente.cliente_key)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="bg-[#1A1E21] border border-[#2A2E31] rounded-xl p-6 w-full max-w-md space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-semibold text-lg">Editar Cliente</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={18} /></button>
+        </div>
+        <p className="text-[11px] text-gray-500">
+          Original: <span className="text-gray-300">{cliente.cliente_original}</span>
+        </p>
+
+        <div className="space-y-3">
+          <Field label="Nome exibido">
+            <input
+              type="text"
+              value={form.nome_exibido}
+              onChange={(e) => setForm({ ...form, nome_exibido: e.target.value })}
+              placeholder={cliente.cliente_original}
+              className={INPUT_CLS + ' w-full'}
+            />
+          </Field>
+
+          <Field label="Agrupar com cliente existente (opcional)">
+            <select
+              value={form.grupo}
+              onChange={(e) => setForm({ ...form, grupo: e.target.value })}
+              className={INPUT_CLS + ' w-full'}
+            >
+              <option value="">— Independente —</option>
+              {candidatos.map((c) => (
+                <option key={c.cliente_key} value={c.cliente_key}>{c.cliente_original}</option>
+              ))}
+            </select>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Área">
+              <select
+                value={form.area}
+                onChange={(e) => setForm({ ...form, area: e.target.value })}
+                className={INPUT_CLS + ' w-full'}
+                style={{ color: COR_AREA[form.area] }}
+              >
+                {AREAS_CLIENTE.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </Field>
+            <Field label="Tipo de serviço">
+              <select
+                value={form.tipo_servico}
+                onChange={(e) => setForm({ ...form, tipo_servico: e.target.value })}
+                className={INPUT_CLS + ' w-full'}
+              >
+                <option value="">—</option>
+                {TIPOS_SERVICO.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Responsável">
+            <select
+              value={form.responsavel}
+              onChange={(e) => setForm({ ...form, responsavel: e.target.value })}
+              className={INPUT_CLS + ' w-full'}
+            >
+              <option value="">—</option>
+              {RESPONSAVEIS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+
+          <label className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.incluir_no_ticket}
+              onChange={(e) => setForm({ ...form, incluir_no_ticket: e.target.checked })}
+              className="accent-[#12F0C6]"
+            />
+            Incluir no cálculo de ticket médio
+          </label>
+
+          <Field label="Observação">
+            <textarea
+              value={form.observacao}
+              onChange={(e) => setForm({ ...form, observacao: e.target.value })}
+              rows={2}
+              className={INPUT_CLS + ' w-full resize-none'}
+            />
+          </Field>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancelar</button>
+          <button
+            onClick={submit}
+            disabled={salvando}
+            className="px-4 py-2 text-sm rounded font-semibold text-black"
+            style={{ background: '#12F0C6' }}
+          >
+            {salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="block text-[10px] uppercase tracking-wider text-gray-500 mb-1">{label}</label>
+      {children}
+    </div>
+  )
+}
+
 // ── Página principal ────────────────────────────────────────────────────
 export default function Precificacao() {
   const today = new Date()
@@ -81,6 +264,7 @@ export default function Precificacao() {
   const [error, setError] = useState(null)
   const [savingId, setSavingId] = useState(null)
   const [savedFlash, setSavedFlash] = useState(null)
+  const [editCliente, setEditCliente] = useState(null)
 
   const carregar = useCallback(async () => {
     setLoading(true)
@@ -100,48 +284,47 @@ export default function Precificacao() {
   const resumo = data?.resumo || {}
   const despesas = data?.despesas || []
   const clientes = data?.clientes || []
+  const clientesBrutos = data?.clientes_brutos || []
   const porArea = data?.por_area || []
   const porTipo = data?.por_tipo || []
+  const resumoPorArea = data?.resumo_por_area || []
 
-  // ── Filtros ────────────────────────────────────────────────────────────
-  const despesasFiltradas = useMemo(() => {
-    return despesas.filter((d) => {
-      if (areaFiltro && d.area !== areaFiltro) return false
-      if (tipoFiltro && d.tipo_custo !== tipoFiltro) return false
-      if (statusFiltro && String(d.status || '').toLowerCase() !== statusFiltro) return false
-      return true
-    })
-  }, [despesas, areaFiltro, tipoFiltro, statusFiltro])
+  const despesasFiltradas = useMemo(() => despesas.filter((d) => {
+    if (areaFiltro && d.area !== areaFiltro) return false
+    if (tipoFiltro && d.tipo_custo !== tipoFiltro) return false
+    if (statusFiltro && String(d.status || '').toLowerCase() !== statusFiltro) return false
+    return true
+  }), [despesas, areaFiltro, tipoFiltro, statusFiltro])
 
-  const clientesFiltrados = useMemo(() => {
-    return clientes.filter((c) => {
-      if (clienteFiltro && !String(c.cliente || '').toLowerCase().includes(clienteFiltro.toLowerCase())) return false
-      return true
-    })
-  }, [clientes, clienteFiltro])
+  const clientesFiltrados = useMemo(() => clientes.filter((c) => {
+    if (clienteFiltro && !String(c.nome_exibido + ' ' + c.cliente_original).toLowerCase().includes(clienteFiltro.toLowerCase())) return false
+    if (areaFiltro && c.area !== areaFiltro) return false
+    return true
+  }), [clientes, clienteFiltro, areaFiltro])
 
-  // ── Salvar classificação ───────────────────────────────────────────────
-  const salvar = useCallback(async (id, patch) => {
+  // Salvar despesa
+  const salvarDespesa = useCallback(async (id, patch) => {
     setSavingId(id)
-    // Otimista: atualizar local imediatamente
-    setData((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        despesas: prev.despesas.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-      }
-    })
+    setData((prev) => prev && ({ ...prev, despesas: prev.despesas.map((d) => d.id === id ? { ...d, ...patch } : d) }))
     try {
       await financeiroAPI.classificarPrecificacao({ lancamento_id: id, ...patch })
       setSavedFlash(id)
       setTimeout(() => setSavedFlash(null), 1500)
-      // Recarregar para atualizar resumo/totais com novo valor
       carregar()
     } catch (e) {
-      console.error('Erro ao salvar classificação', e)
-      alert('Erro ao salvar: ' + (e?.response?.data?.detail || e.message))
+      alert('Erro: ' + (e?.response?.data?.detail || e.message))
     } finally {
       setSavingId(null)
+    }
+  }, [carregar])
+
+  // Salvar cliente
+  const salvarCliente = useCallback(async (payload) => {
+    try {
+      await financeiroAPI.classificarCliente(payload)
+      await carregar()
+    } catch (e) {
+      alert('Erro ao salvar cliente: ' + (e?.response?.data?.detail || e.message))
     }
   }, [carregar])
 
@@ -159,7 +342,7 @@ export default function Precificacao() {
         </select>
         <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)} className={INPUT_CLS}>
           <option value="">Todas as áreas</option>
-          {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {AREAS_CLIENTE.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
         <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className={INPUT_CLS}>
           <option value="">Todos os tipos</option>
@@ -193,21 +376,26 @@ export default function Precificacao() {
         </div>
       )}
 
-      {/* ── Cards de resumo ─────────────────────────────────────────────── */}
+      {/* ── Resumo geral ────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         <SummaryCard icon={TrendingUp} label="Receita" value={formatCurrency(resumo.receita_total)} color="#12F0C6" loading={loading} />
         <SummaryCard icon={TrendingDown} label="Custo Op." value={formatCurrency(resumo.custo_total)} color="#EF4444" loading={loading} />
         <SummaryCard
-          icon={Wallet}
-          label="Lucro Op."
-          value={formatCurrency(resumo.lucro)}
-          color={resumo.lucro >= 0 ? '#12F0C6' : '#EF4444'}
-          loading={loading}
+          icon={Wallet} label="Lucro Op." value={formatCurrency(resumo.lucro)}
+          color={resumo.lucro >= 0 ? '#12F0C6' : '#EF4444'} loading={loading}
         />
-        <SummaryCard icon={Percent} label="Margem" value={formatPercent(resumo.margem_percentual / 100)} color="#F59E0B" loading={loading} />
+        <SummaryCard icon={Percent} label="Margem" value={formatPercent((resumo.margem_percentual || 0) / 100)} color="#F59E0B" loading={loading} />
         <SummaryCard icon={Users} label="Clientes" value={resumo.qtd_clientes ?? '—'} color="#6366F1" loading={loading} />
         <SummaryCard icon={DollarSign} label="Ticket Médio" value={formatCurrency(resumo.ticket_medio)} color="#12F0C6" loading={loading} />
         <SummaryCard icon={Calculator} label="Custo / Cliente" value={formatCurrency(resumo.custo_medio_cliente)} color="#EC4899" loading={loading} />
+      </div>
+
+      {/* ── Resumo por área ─────────────────────────────────────────────── */}
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-2">Receita × Custo por Área</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {resumoPorArea.map((a) => <AreaCard key={a.area} {...a} />)}
+        </div>
       </div>
 
       {/* ── Gráficos ────────────────────────────────────────────────────── */}
@@ -247,7 +435,7 @@ export default function Precificacao() {
         </div>
       </div>
 
-      {/* ── Tabela de custos operacionais ───────────────────────────────── */}
+      {/* ── Tabela de despesas ──────────────────────────────────────────── */}
       <div className="rounded-xl border" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
         <div className="flex items-center justify-between p-4 pb-2">
           <h3 className="text-sm font-semibold text-white">Custos Operacionais — Editável</h3>
@@ -278,44 +466,34 @@ export default function Precificacao() {
                   <td className="px-3 py-2 text-gray-500 text-[10px]">{d.fonte}</td>
                   <td className="px-3 py-2">
                     <select
-                      value={d.area}
-                      onChange={(e) => salvar(d.id, { area: e.target.value })}
-                      disabled={savingId === d.id}
-                      className={SELECT_INLINE_CLS}
+                      value={d.area} onChange={(e) => salvarDespesa(d.id, { area: e.target.value })}
+                      disabled={savingId === d.id} className={SELECT_INLINE_CLS}
                       style={{ color: COR_AREA[d.area] || '#fff' }}
                     >
-                      {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+                      {AREAS_CUSTO.map((a) => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </td>
                   <td className="px-3 py-2">
                     <select
-                      value={d.tipo_custo}
-                      onChange={(e) => salvar(d.id, { tipo_custo: e.target.value })}
-                      disabled={savingId === d.id}
-                      className={SELECT_INLINE_CLS}
+                      value={d.tipo_custo} onChange={(e) => salvarDespesa(d.id, { tipo_custo: e.target.value })}
+                      disabled={savingId === d.id} className={SELECT_INLINE_CLS}
                     >
                       {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </td>
                   <td className="px-3 py-2">
                     <input
-                      type="text"
-                      defaultValue={d.observacao || ''}
-                      onBlur={(e) => {
-                        if (e.target.value !== (d.observacao || '')) salvar(d.id, { observacao: e.target.value })
-                      }}
-                      placeholder="—"
-                      className={SELECT_INLINE_CLS + ' w-full min-w-[120px]'}
+                      type="text" defaultValue={d.observacao || ''}
+                      onBlur={(e) => { if (e.target.value !== (d.observacao || '')) salvarDespesa(d.id, { observacao: e.target.value }) }}
+                      placeholder="—" className={SELECT_INLINE_CLS + ' w-full min-w-[120px]'}
                     />
                   </td>
                   <td className="px-3 py-2 text-center">
                     <label className="inline-flex items-center cursor-pointer">
                       <input
-                        type="checkbox"
-                        checked={d.incluir_na_precificacao !== false}
-                        onChange={(e) => salvar(d.id, { incluir_na_precificacao: e.target.checked })}
-                        disabled={savingId === d.id}
-                        className="accent-[#12F0C6]"
+                        type="checkbox" checked={d.incluir_na_precificacao !== false}
+                        onChange={(e) => salvarDespesa(d.id, { incluir_na_precificacao: e.target.checked })}
+                        disabled={savingId === d.id} className="accent-[#12F0C6]"
                       />
                       {savedFlash === d.id && <Check size={12} className="ml-1 text-[#12F0C6]" />}
                     </label>
@@ -330,47 +508,77 @@ export default function Precificacao() {
         </div>
       </div>
 
-      {/* ── Tabela de clientes / ticket ──────────────────────────────────── */}
+      {/* ── Tabela de clientes ──────────────────────────────────────────── */}
       <div className="rounded-xl border" style={{ background: '#1A1E21', borderColor: 'rgba(255,255,255,0.07)' }}>
         <div className="flex items-center justify-between p-4 pb-2">
-          <h3 className="text-sm font-semibold text-white">Clientes & Ticket Médio</h3>
+          <h3 className="text-sm font-semibold text-white">Clientes & Receita por Área</h3>
           <span className="text-[11px] text-gray-500">{clientesFiltrados.length} clientes</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
-                <th className="text-left px-3 py-2 text-gray-500 font-medium">Cliente</th>
+                <th className="text-left px-3 py-2 text-gray-500 font-medium">Original</th>
+                <th className="text-left px-3 py-2 text-gray-500 font-medium">Exibido</th>
+                <th className="text-left px-3 py-2 text-gray-500 font-medium">Área</th>
+                <th className="text-left px-3 py-2 text-gray-500 font-medium">Tipo</th>
+                <th className="text-left px-3 py-2 text-gray-500 font-medium">Resp.</th>
                 <th className="text-right px-3 py-2 text-gray-500 font-medium">Recebido</th>
-                <th className="text-right px-3 py-2 text-gray-500 font-medium">Ticket</th>
                 <th className="text-right px-3 py-2 text-gray-500 font-medium">% Receita</th>
                 <th className="text-right px-3 py-2 text-gray-500 font-medium">Margem est.</th>
                 <th className="text-left px-3 py-2 text-gray-500 font-medium">Status</th>
+                <th className="text-center px-3 py-2 text-gray-500 font-medium">Ações</th>
               </tr>
             </thead>
             <tbody>
               {clientesFiltrados.map((c) => (
-                <tr key={c.cliente} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }} className="hover:bg-white/[0.02]">
-                  <td className="px-3 py-2 text-white font-medium">{c.cliente}</td>
+                <tr key={c.cliente_key} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }} className="hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 text-gray-400 text-[10px]">{c.cliente_original}</td>
+                  <td className="px-3 py-2 text-white font-medium">
+                    {c.nome_exibido}
+                    {!c.incluir_no_ticket && <span className="ml-1 text-[9px] text-gray-600">(fora ticket)</span>}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold" style={{ background: (COR_AREA[c.area] || '#9CA3AF') + '20', color: COR_AREA[c.area] || '#9CA3AF' }}>
+                      {c.area}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-gray-400">{c.tipo_servico || '—'}</td>
+                  <td className="px-3 py-2 text-gray-400">{c.responsavel || '—'}</td>
                   <td className="px-3 py-2 text-right text-[#12F0C6] font-semibold">{formatCurrency(c.valor_recebido)}</td>
-                  <td className="px-3 py-2 text-right text-gray-300">{formatCurrency(c.ticket)}</td>
                   <td className="px-3 py-2 text-right text-gray-400">{c.participacao}%</td>
-                  <td
-                    className="px-3 py-2 text-right font-medium"
-                    style={{ color: c.margem_estimada >= 0 ? '#12F0C6' : '#EF4444' }}
-                  >
+                  <td className="px-3 py-2 text-right font-medium" style={{ color: c.margem_estimada >= 0 ? '#12F0C6' : '#EF4444' }}>
                     {c.margem_estimada}%
                   </td>
                   <td className="px-3 py-2 text-gray-400 text-[10px]">{c.status}</td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      onClick={() => setEditCliente(c)}
+                      className="px-2 py-1 rounded text-[10px] font-medium"
+                      style={{ background: 'rgba(18,240,198,0.12)', color: '#12F0C6' }}
+                      title="Editar cliente"
+                    >
+                      <Edit3 size={11} />
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!loading && clientesFiltrados.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-500">Nenhum cliente com receita neste período.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-6 text-center text-gray-500">Nenhum cliente com receita neste período.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {editCliente && (
+        <ModalEditarCliente
+          cliente={editCliente}
+          clientesBrutos={clientesBrutos}
+          onClose={() => setEditCliente(null)}
+          onSave={salvarCliente}
+        />
+      )}
     </div>
   )
 }

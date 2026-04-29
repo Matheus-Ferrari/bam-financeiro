@@ -92,5 +92,6 @@ export const baseReceitasStorage = new FirestoreStorage("base_receitas");
 export const baseDespesasStorage = new FirestoreStorage("base_despesas");
 export const usuariosStorage = new FirestoreStorage("usuarios");
 export const precificacaoClassificacoesStorage = new FirestoreStorage("precificacao_classificacoes");
+export const precificacaoClientesStorage = new FirestoreStorage("precificacao_clientes_classificacoes");
 
 export { db };

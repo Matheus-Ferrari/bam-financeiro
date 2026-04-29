@@ -1,10 +1,15 @@
 import { FluxoCaixaService } from "./fluxoCaixa";
-import { precificacaoClassificacoesStorage } from "../lib/firestore";
+import {
+  precificacaoClassificacoesStorage,
+  precificacaoClientesStorage,
+} from "../lib/firestore";
 
-type Area = "TI" | "Marketing" | "Outros";
+type Area = "TI" | "Marketing" | "Outros" | "Misto";
 type TipoCusto = "Salario" | "Ferramenta" | "Licenca" | "Trafego" | "Operacional" | "Outro";
+type TipoServico = "Site" | "CRM" | "Trafego" | "SocialMedia" | "Design" | "Automacao" | "Suporte" | "Outro";
+type Responsavel = "Ferrari" | "Luan" | "Marketing" | "Outro";
 
-interface Classificacao {
+interface ClassificacaoDespesa {
   id?: string;
   lancamento_id: string;
   area?: Area;
@@ -13,8 +18,22 @@ interface Classificacao {
   incluir_na_precificacao?: boolean;
 }
 
+interface ClassificacaoCliente {
+  id?: string;
+  cliente_key: string;
+  nome_exibido?: string;
+  grupo?: string;
+  area?: Area;
+  tipo_servico?: TipoServico;
+  responsavel?: Responsavel;
+  incluir_no_ticket?: boolean;
+  observacao?: string;
+}
+
 const norm = (s: unknown): string =>
-  String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+
+const clienteKey = (nome: unknown): string => norm(nome).replace(/\s+/g, "_");
 
 const toFloat = (v: unknown): number => {
   if (typeof v === "number") return v;
@@ -26,12 +45,12 @@ const toFloat = (v: unknown): number => {
   return 0;
 };
 
-// Classificação automática (default) — usuário pode sobrescrever
-function autoClassificar(l: Record<string, unknown>): { area: Area; tipo_custo: TipoCusto } {
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+function autoClassificarDespesa(l: Record<string, unknown>): { area: Area; tipo_custo: TipoCusto } {
   const desc = norm(l.descricao);
   const cat = norm(l.categoria);
 
-  // Salários: Ferrari/Luan = TI, demais = Marketing, exceto Lucca = Outros
   const isSalario = cat.includes("salar") || desc.includes("salar");
   if (isSalario) {
     if (desc.includes("ferrari") || desc.includes("luan")) return { area: "TI", tipo_custo: "Salario" };
@@ -39,12 +58,10 @@ function autoClassificar(l: Record<string, unknown>): { area: Area; tipo_custo: 
     return { area: "Marketing", tipo_custo: "Salario" };
   }
 
-  // Tráfego/Ads
   if (cat.includes("trafego") || cat.includes("ads") || desc.includes("ads") || desc.includes("trafego") || desc.includes("meta") || desc.includes("google ads")) {
     return { area: "Marketing", tipo_custo: "Trafego" };
   }
 
-  // Ferramentas/Licenças (heurística simples)
   if (cat.includes("ferramenta") || cat.includes("software") || cat.includes("saas") || desc.includes("licenc") || desc.includes("assinatura")) {
     return { area: "Outros", tipo_custo: "Ferramenta" };
   }
@@ -57,11 +74,20 @@ function autoClassificar(l: Record<string, unknown>): { area: Area; tipo_custo: 
 export class PrecificacaoService {
   constructor(private fluxo: FluxoCaixaService) {}
 
-  private async loadClassMap(): Promise<Record<string, Classificacao>> {
+  private async loadDespesaMap(): Promise<Record<string, ClassificacaoDespesa>> {
     const all = await precificacaoClassificacoesStorage.all();
-    const map: Record<string, Classificacao> = {};
-    for (const c of all as unknown as Classificacao[]) {
+    const map: Record<string, ClassificacaoDespesa> = {};
+    for (const c of all as unknown as ClassificacaoDespesa[]) {
       if (c.lancamento_id) map[c.lancamento_id] = c;
+    }
+    return map;
+  }
+
+  private async loadClienteMap(): Promise<Record<string, ClassificacaoCliente>> {
+    const all = await precificacaoClientesStorage.all();
+    const map: Record<string, ClassificacaoCliente> = {};
+    for (const c of all as unknown as ClassificacaoCliente[]) {
+      if (c.cliente_key) map[c.cliente_key] = c;
     }
     return map;
   }
@@ -69,14 +95,14 @@ export class PrecificacaoService {
   async get(params: { mes?: number; ano?: number }): Promise<Record<string, unknown>> {
     const fluxo = await this.fluxo.getFluxo({ mes: params.mes, ano: params.ano });
     const lancamentos = (fluxo.lancamentos as Record<string, unknown>[]) || [];
-    const classMap = await this.loadClassMap();
+    const despesaMap = await this.loadDespesaMap();
+    const clienteMap = await this.loadClienteMap();
 
-    // Despesas (saídas) → custos operacionais
+    // ── Despesas ──────────────────────────────────────────────────────
     const despesasRaw = lancamentos.filter((l) => l.tipo === "saida");
     const despesas = despesasRaw.map((l) => {
-      const cls = classMap[String(l.id)] || {};
-      const auto = autoClassificar(l);
-      const incluir = cls.incluir_na_precificacao !== false; // default true
+      const cls = despesaMap[String(l.id)] || {};
+      const auto = autoClassificarDespesa(l);
       return {
         id: l.id,
         data_competencia: l.data_competencia,
@@ -91,94 +117,196 @@ export class PrecificacaoService {
         area: cls.area || auto.area,
         tipo_custo: cls.tipo_custo || auto.tipo_custo,
         observacao: cls.observacao || "",
-        incluir_na_precificacao: incluir,
+        incluir_na_precificacao: cls.incluir_na_precificacao !== false,
       };
     });
 
-    // Receitas (entradas) → ticket / receita
+    // ── Receitas (entradas) → buckets por cliente ──────────────────────
     const receitasRaw = lancamentos.filter((l) => l.tipo === "entrada");
-    const receitas = receitasRaw.map((l) => ({
-      id: l.id,
-      data_competencia: l.data_competencia,
-      descricao: l.descricao,
-      cliente: l.cliente || l.descricao,
-      categoria: l.categoria,
-      valor_previsto: toFloat(l.valor_previsto),
-      valor_realizado: toFloat(l.valor_realizado),
-      valor: toFloat(l.valor_realizado) || toFloat(l.valor_previsto),
-      status: l.status,
-      fonte: l.fonte,
-    }));
 
-    // Cálculos
-    const consideradas = despesas.filter((d) => d.incluir_na_precificacao);
-    const custoTotal = consideradas.reduce((s, d) => s + d.valor, 0);
-    const receitaTotal = receitas.reduce((s, r) => s + r.valor, 0);
+    interface Bucket {
+      cliente_original: string;
+      cliente_key: string;
+      valor: number;
+      previsto: number;
+      status: string;
+    }
+    const buckets: Record<string, Bucket> = {};
+    for (const r of receitasRaw) {
+      const nomeOriginal = String(r.cliente || r.descricao || "—");
+      const key = clienteKey(nomeOriginal);
+      if (!buckets[key]) {
+        buckets[key] = {
+          cliente_original: nomeOriginal,
+          cliente_key: key,
+          valor: 0,
+          previsto: 0,
+          status: String(r.status || ""),
+        };
+      }
+      buckets[key].valor += toFloat(r.valor_realizado) || toFloat(r.valor_previsto);
+      buckets[key].previsto += toFloat(r.valor_previsto);
+    }
+
+    // Resolver grupo final
+    const resolveGrupo = (key: string, depth = 0): string => {
+      if (depth > 10) return key;
+      const cls = clienteMap[key];
+      if (!cls?.grupo || cls.grupo === key) return key;
+      return resolveGrupo(cls.grupo, depth + 1);
+    };
+
+    interface Consolidado {
+      grupo_key: string;
+      nome_exibido: string;
+      originais: { cliente_original: string; cliente_key: string; valor: number; status: string }[];
+      valor: number;
+      previsto: number;
+      status: string;
+      area: Area;
+      tipo_servico: string;
+      responsavel: string;
+      observacao: string;
+      incluir_no_ticket: boolean;
+    }
+    const consolidados: Record<string, Consolidado> = {};
+    for (const b of Object.values(buckets)) {
+      const grupoKey = resolveGrupo(b.cliente_key);
+      const clsGrupo = clienteMap[grupoKey] || {};
+      if (!consolidados[grupoKey]) {
+        const nomeFallback = buckets[grupoKey]?.cliente_original || b.cliente_original;
+        consolidados[grupoKey] = {
+          grupo_key: grupoKey,
+          nome_exibido: clsGrupo.nome_exibido || nomeFallback,
+          originais: [],
+          valor: 0,
+          previsto: 0,
+          status: b.status,
+          area: clsGrupo.area || "Outros",
+          tipo_servico: clsGrupo.tipo_servico || "",
+          responsavel: clsGrupo.responsavel || "",
+          observacao: clsGrupo.observacao || "",
+          incluir_no_ticket: clsGrupo.incluir_no_ticket !== false,
+        };
+      }
+      const c = consolidados[grupoKey];
+      c.originais.push({
+        cliente_original: b.cliente_original,
+        cliente_key: b.cliente_key,
+        valor: round2(b.valor),
+        status: b.status,
+      });
+      c.valor += b.valor;
+      c.previsto += b.previsto;
+    }
+
+    // ── Cálculos agregados ────────────────────────────────────────────
+    const consideradasDespesas = despesas.filter((d) => d.incluir_na_precificacao);
+    const custoTotal = consideradasDespesas.reduce((s, d) => s + d.valor, 0);
+    const receitaTotal = Object.values(consolidados).reduce((s, c) => s + c.valor, 0);
     const lucro = receitaTotal - custoTotal;
     const margem = receitaTotal > 0 ? (lucro / receitaTotal) * 100 : 0;
 
-    // Clientes ativos no mês = clientes únicos com algum valor recebido OU previsto
-    const clientesMap: Record<string, { cliente: string; valor: number; previsto: number; status: string }> = {};
-    for (const r of receitas) {
-      const key = String(r.cliente || r.descricao || "—");
-      if (!clientesMap[key]) clientesMap[key] = { cliente: key, valor: 0, previsto: 0, status: String(r.status || "") };
-      clientesMap[key].valor += r.valor;
-      clientesMap[key].previsto += r.valor_previsto;
-    }
-    const clientes = Object.values(clientesMap).filter((c) => c.valor > 0 || c.previsto > 0);
-    const qtdClientes = clientes.length;
-    const ticketMedio = qtdClientes > 0 ? receitaTotal / qtdClientes : 0;
+    const clientesParaTicket = Object.values(consolidados).filter((c) => c.incluir_no_ticket && c.valor > 0);
+    const qtdClientes = clientesParaTicket.length;
+    const receitaTicket = clientesParaTicket.reduce((s, c) => s + c.valor, 0);
+    const ticketMedio = qtdClientes > 0 ? receitaTicket / qtdClientes : 0;
     const custoMedio = qtdClientes > 0 ? custoTotal / qtdClientes : 0;
 
-    // Distribuição por área
-    const areas = ["TI", "Marketing", "Outros"] as const;
-    const porArea = areas.map((a) => ({
-      area: a,
-      valor: consideradas.filter((d) => d.area === a).reduce((s, d) => s + d.valor, 0),
-    }));
+    // Custo por área
+    const areas: Area[] = ["TI", "Marketing", "Outros", "Misto"];
+    const custoPorArea: Record<string, number> = {};
+    for (const a of areas) custoPorArea[a] = consideradasDespesas.filter((d) => d.area === a).reduce((s, d) => s + d.valor, 0);
 
-    // Distribuição por tipo
-    const tipos = ["Salario", "Ferramenta", "Licenca", "Trafego", "Operacional", "Outro"] as const;
+    // Receita por área
+    const receitaPorArea: Record<string, number> = { TI: 0, Marketing: 0, Outros: 0, Misto: 0 };
+    const qtdClientesPorArea: Record<string, number> = { TI: 0, Marketing: 0, Outros: 0, Misto: 0 };
+    for (const c of Object.values(consolidados)) {
+      receitaPorArea[c.area] = (receitaPorArea[c.area] || 0) + c.valor;
+      qtdClientesPorArea[c.area] = (qtdClientesPorArea[c.area] || 0) + (c.valor > 0 ? 1 : 0);
+    }
+
+    const resumoPorArea = areas.map((a) => {
+      const rec = receitaPorArea[a] || 0;
+      let custoArea = custoPorArea[a] || 0;
+      // Misto: usa metade dos custos de TI + Marketing como referência
+      if (a === "Misto") custoArea = ((custoPorArea.TI || 0) + (custoPorArea.Marketing || 0)) / 2;
+      const margemArea = rec - custoArea;
+      const margemPct = rec > 0 ? (margemArea / rec) * 100 : 0;
+      const qtd = qtdClientesPorArea[a] || 0;
+      return {
+        area: a,
+        receita: round2(rec),
+        custo: round2(custoArea),
+        margem: round2(margemArea),
+        margem_percentual: round2(margemPct),
+        ticket_medio: round2(qtd > 0 ? rec / qtd : 0),
+        qtd_clientes: qtd,
+      };
+    });
+
+    // Tabela de clientes
+    const clientesTabela = Object.values(consolidados)
+      .map((c) => {
+        const margemEst = c.valor > 0 ? round2(((c.valor - custoMedio) / c.valor) * 100) : 0;
+        return {
+          grupo_key: c.grupo_key,
+          cliente_key: c.grupo_key,
+          nome_exibido: c.nome_exibido,
+          cliente_original: c.originais.map((o) => o.cliente_original).join(" + "),
+          originais: c.originais,
+          valor_recebido: round2(c.valor),
+          valor_previsto: round2(c.previsto),
+          status: c.status,
+          ticket: round2(c.valor),
+          participacao: receitaTotal > 0 ? round2((c.valor / receitaTotal) * 100) : 0,
+          margem_estimada: margemEst,
+          area: c.area,
+          tipo_servico: c.tipo_servico,
+          responsavel: c.responsavel,
+          incluir_no_ticket: c.incluir_no_ticket,
+          observacao: c.observacao,
+        };
+      })
+      .sort((a, b) => b.valor_recebido - a.valor_recebido);
+
+    // Lista de clientes brutos (para dropdown "Agrupar com")
+    const clientesBrutos = Object.values(buckets)
+      .map((b) => ({ cliente_key: b.cliente_key, cliente_original: b.cliente_original, valor: round2(b.valor) }))
+      .sort((a, b) => a.cliente_original.localeCompare(b.cliente_original));
+
+    // Para gráfico (sem Misto)
+    const porArea = (["TI", "Marketing", "Outros"] as Area[]).map((a) => ({ area: a, valor: round2(custoPorArea[a] || 0) }));
+
+    const tipos: TipoCusto[] = ["Salario", "Ferramenta", "Licenca", "Trafego", "Operacional", "Outro"];
     const porTipo = tipos.map((t) => ({
       tipo: t,
-      valor: consideradas.filter((d) => d.tipo_custo === t).reduce((s, d) => s + d.valor, 0),
+      valor: round2(consideradasDespesas.filter((d) => d.tipo_custo === t).reduce((s, d) => s + d.valor, 0)),
     }));
-
-    // Tabela de clientes enriquecida
-    const clientesTabela = clientes
-      .map((c) => ({
-        cliente: c.cliente,
-        valor_recebido: Math.round(c.valor * 100) / 100,
-        valor_previsto: Math.round(c.previsto * 100) / 100,
-        status: c.status,
-        ticket: Math.round(c.valor * 100) / 100,
-        participacao: receitaTotal > 0 ? Math.round((c.valor / receitaTotal) * 1000) / 10 : 0,
-        margem_estimada: c.valor > 0 ? Math.round(((c.valor - custoMedio) / c.valor) * 1000) / 10 : 0,
-      }))
-      .sort((a, b) => b.valor_recebido - a.valor_recebido);
 
     return {
       resumo: {
-        receita_total: Math.round(receitaTotal * 100) / 100,
-        custo_total: Math.round(custoTotal * 100) / 100,
-        lucro: Math.round(lucro * 100) / 100,
-        ticket_medio: Math.round(ticketMedio * 100) / 100,
+        receita_total: round2(receitaTotal),
+        custo_total: round2(custoTotal),
+        lucro: round2(lucro),
+        ticket_medio: round2(ticketMedio),
         qtd_clientes: qtdClientes,
-        custo_medio_cliente: Math.round(custoMedio * 100) / 100,
+        custo_medio_cliente: round2(custoMedio),
         margem_percentual: Math.round(margem * 10) / 10,
       },
       por_area: porArea,
       por_tipo: porTipo,
+      resumo_por_area: resumoPorArea,
       despesas,
-      receitas,
       clientes: clientesTabela,
+      clientes_brutos: clientesBrutos,
     };
   }
 
-  async setClassificacao(data: Classificacao): Promise<Record<string, unknown>> {
+  async setClassificacao(data: ClassificacaoDespesa): Promise<Record<string, unknown>> {
     if (!data.lancamento_id) throw new Error("lancamento_id é obrigatório");
     const all = await precificacaoClassificacoesStorage.all();
-    const existing = (all as unknown as Classificacao[]).find((c) => c.lancamento_id === data.lancamento_id);
+    const existing = (all as unknown as ClassificacaoDespesa[]).find((c) => c.lancamento_id === data.lancamento_id);
     const payload: Record<string, unknown> = {
       lancamento_id: data.lancamento_id,
       atualizado_em: new Date().toISOString(),
@@ -192,6 +320,30 @@ export class PrecificacaoService {
       await precificacaoClassificacoesStorage.update(String(existing.id), { ...existing, ...payload });
     } else {
       await precificacaoClassificacoesStorage.create(payload);
+    }
+    return { ok: true };
+  }
+
+  async setClienteClassificacao(data: ClassificacaoCliente): Promise<Record<string, unknown>> {
+    if (!data.cliente_key) throw new Error("cliente_key é obrigatório");
+    const all = await precificacaoClientesStorage.all();
+    const existing = (all as unknown as ClassificacaoCliente[]).find((c) => c.cliente_key === data.cliente_key);
+    const payload: Record<string, unknown> = {
+      cliente_key: data.cliente_key,
+      atualizado_em: new Date().toISOString(),
+    };
+    if (data.nome_exibido !== undefined) payload.nome_exibido = data.nome_exibido;
+    if (data.grupo !== undefined) payload.grupo = data.grupo || null;
+    if (data.area !== undefined) payload.area = data.area;
+    if (data.tipo_servico !== undefined) payload.tipo_servico = data.tipo_servico;
+    if (data.responsavel !== undefined) payload.responsavel = data.responsavel;
+    if (data.incluir_no_ticket !== undefined) payload.incluir_no_ticket = data.incluir_no_ticket;
+    if (data.observacao !== undefined) payload.observacao = data.observacao;
+
+    if (existing && existing.id) {
+      await precificacaoClientesStorage.update(String(existing.id), { ...existing, ...payload });
+    } else {
+      await precificacaoClientesStorage.create(payload);
     }
     return { ok: true };
   }

@@ -181,6 +181,13 @@ router.post("/precificacao/classificar", async (req, res) => {
   } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
 });
 
+// POST /financeiro/precificacao/cliente
+router.post("/precificacao/cliente", async (req, res) => {
+  try {
+    res.json(await precificacaoService.setClienteClassificacao(req.body));
+  } catch (e: unknown) { res.status(500).json({ detail: String(e) }); }
+});
+
 // ── Edição de base de dados (antigo Excel) ────────────────────────────
 
 // PUT /financeiro/despesas/:id
